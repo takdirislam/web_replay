@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 import requests
 import json
 import os
+import redis
+from datetime import datetime
 
 
 app = Flask(__name__)
@@ -13,6 +15,9 @@ WASENDER_API_TOKEN = "37bf33ac1d6e4e6be8ae324373c2171400a1dd6183c6e501df646eb5f4
 WASENDER_SESSION = "TAKDIR"
 WASENDER_API_URL = "https://wasenderapi.com/api/send-message"
 
+# Redis Configuration
+REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379')
+redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 # Dermijan.com Allowlist URLs
 ALLOWED_URLS = [
@@ -87,19 +92,93 @@ ALLOWED_URLS = [
 ]
 
 
-def get_perplexity_answer(question):
-    """Get answer from Perplexity API with dermijan.com restriction"""
-    print(f"📥 Question received: {question}")
+class ConversationManager:
+    def __init__(self):
+        self.redis_client = redis_client
+        self.ttl_seconds = 604800  # 7 days (sliding window)
+        self.max_messages = 20  # Keep last 20 messages per conversation
     
-    # Build restricted prompt with allowlist - SHORTER VERSION
+    def get_conversation_history(self, user_id: str) -> list:
+        """Get conversation history for a user"""
+        try:
+            conversation_key = f"whatsapp_chat:{user_id}"
+            messages = self.redis_client.lrange(conversation_key, 0, -1)
+            
+            # Parse and return messages (newest first, so reverse)
+            conversation = []
+            for msg in reversed(messages):
+                try:
+                    conversation.append(json.loads(msg))
+                except:
+                    continue
+            
+            print(f"📖 Retrieved {len(conversation)} messages for {user_id}")
+            return conversation
+            
+        except Exception as e:
+            print(f"❌ Error retrieving conversation for {user_id}: {e}")
+            return []
+    
+    def store_message(self, user_id: str, message: str, sender: str = "user"):
+        """Store message with sliding window TTL"""
+        try:
+            conversation_key = f"whatsapp_chat:{user_id}"
+            
+            message_data = {
+                "message": message,
+                "sender": sender,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # Store message (newest messages at the beginning of list)
+            self.redis_client.lpush(conversation_key, json.dumps(message_data))
+            
+            # Sliding expiration - extend TTL on each interaction
+            self.redis_client.expire(conversation_key, self.ttl_seconds)
+            
+            # Keep only last N messages
+            self.redis_client.ltrim(conversation_key, 0, self.max_messages - 1)
+            
+            print(f"💾 Stored message for {user_id} (sender: {sender})")
+            
+        except Exception as e:
+            print(f"❌ Error storing message for {user_id}: {e}")
+    
+    def format_conversation_context(self, conversation_history: list) -> str:
+        """Format conversation history for LLM context"""
+        if not conversation_history:
+            return ""
+        
+        context = "Previous conversation:\n"
+        for msg in conversation_history[-10:]:  # Last 10 messages for context
+            role = "User" if msg["sender"] == "user" else "Assistant"
+            context += f"{role}: {msg['message']}\n"
+        
+        return context + "\nCurrent conversation:\n"
+
+
+# Initialize conversation manager
+conversation_manager = ConversationManager()
+
+
+def get_perplexity_answer(question, user_id):
+    """Get answer from Perplexity API with conversation context"""
+    print(f"📥 Question received from {user_id}: {question}")
+    
+    # Get conversation history
+    conversation_history = conversation_manager.get_conversation_history(user_id)
+    conversation_context = conversation_manager.format_conversation_context(conversation_history)
+    
+    # Build restricted prompt with allowlist and context
     prompt = (
         f"Answer briefly using ONLY information from these dermijan.com pages:\n"
         + "\n".join(ALLOWED_URLS) + "\n\n"
-        f"Question: {question}\n\n"
-        "Instructions: Give a SHORT, direct answer (2-3 sentences maximum). "
+        f"{conversation_context}"
+        f"User: {question}\n\n"
+        "Instructions: Give a SHORT, direct answer (4-6 lines maximum). "
         "Do NOT use outside information. Only use the provided dermijan.com URLs. "
-        "If answer not found, reply: 'இந்த தகவல் எனது அங்கீகரிक্কப्পட்ট ஆதாரங்களில் கிடைக্கवில்லை.' "
-        "Do NOT include source URLs in your response. Keep it very concise."
+        "If answer not found, reply: 'இந்த தகவல் எனது அங்கீকরிக্কப्পட்ட ஆதாரங்களில் கিডைক्कবিল्লை.' "
+        "Do NOT include source URLs in your response. Keep it conversational and helpful."
     )
     
     url = "https://api.perplexity.ai/chat/completions"
@@ -110,7 +189,7 @@ def get_perplexity_answer(question):
             {"role": "system", "content": "You are a support assistant for a skin, hair, and body care clinic named *Dermijan*, interacting with customers on WhatsApp.\n\n**Guidelines:**\n\n- Use WhatsApp formatting:\n  - *Bold* for key terms (use asterisks)\n  - Bullets (with hyphens) for lists\n  - Keep replies short and user-friendly (4–6 lines per message)\n\n**Conversation Rules:**\n\n1. **Always address the user's specific query clearly.**\n2. **For any treatment or service question:**\n   - Check Dermijan's official knowledge base or service data before answering.\n   - If the info is unavailable, say:\n     \"That specific detail isn't available right now. Please contact our support team at *dermijanofficialcontact@gmail.com* or *+91 9003444435* for accurate information.\"\n3. **If the user asks for pricing:**\n   - If price is known:\n     \"*Price*: ₹XXXX (approximate, may vary based on consultation)\"\n   - If not available:\n     \"Sorry, this treatment's pricing isn't shared publicly. You can contact our team at *dermijanofficialcontact@gmail.com* or *+91 9003444435* to get the exact rates.\"\n4. **If the user mentions a skin, hair, or body issue (e.g., 'I have a skin issue'):**\n   - Ask follow-up questions to understand the concern:\n     \"I'm here to help! Could you please share more details about the skin issue you're facing? (e.g., since when, symptoms, affected area). This will help us suggest the right treatment.\"\n5. **General behavior:**\n   - Never repeat previous responses.\n   - Always offer the next step:\n     \"Would you like more info about this treatment?\" or \"Can I help you schedule a free consultation?\"\n   - Be polite, friendly, and empathetic—like a real person helping with care."},
             {"role": "user", "content": prompt}
         ],
-        "max_tokens": 1200,  # ← Reduced from 600 to 200
+        "max_tokens": 1200,
         "temperature": 0.1
     }
     
@@ -130,19 +209,21 @@ def get_perplexity_answer(question):
             # Remove any source URLs that might slip through
             reply = remove_source_urls(reply)
             
-            # Validate response contains allowed URLs (but don't show them)
-            used_urls = [u for u in ALLOWED_URLS if u in reply]
-            if "இந்த தகவல்" in reply:
-                return "இந்த தகவல் எனது அங்கীকরিক্কप্পট্ট ஆதাரங्களில் கিடைক্கவில্লை"
+            # Store user question and bot response
+            conversation_manager.store_message(user_id, question, "user")
+            conversation_manager.store_message(user_id, reply, "bot")
+            
+            if "இந்த தகவল்" in reply:
+                return "இந্ত তকবল് এনদু অঙ্গীকরিক্কপ্পট্ট আদারঙ্গলিল् কিডাক্কবিল্লাই"
             
             return reply
         else:
             print(f"❌ Perplexity API error: {response.status_code} - {response.text}")
-            return "মন্নিক্কবুম্, ইন্দ নেরত্তিল् সেবை বজঙ্গ মুদিয়বিল্লै।"
+            return "மন্নিক্কবুম্, ইন্ত নেরত্তিল् সেবাই বজঙ্গ মুদিয়বিল্লাই।"
             
     except Exception as e:
         print(f"❌ Exception: {str(e)}")
-        return "মন্নিক্কবুম্, সিল সিক্কল् এর্পট্টুল্লদু।"
+        return "মন্নিক্কবুम্, সিল সিক্কল্ এর্পট্টুল্লদু।"
 
 
 def remove_source_urls(text):
@@ -229,11 +310,12 @@ def ask_question():
     """Direct API endpoint for questions"""
     data = request.get_json()
     question = data.get("question")
+    user_id = data.get("user_id", "anonymous")
     
     if not question:
-        return jsonify({"reply": "கেল্বি কালিয়াক উল্লদু!"}), 400
+        return jsonify({"reply": "কেল্বি কালিয়াক উল্লদু!"}), 400
     
-    answer = get_perplexity_answer(question)
+    answer = get_perplexity_answer(question, user_id)
     return jsonify({"reply": answer})
 
 
@@ -251,12 +333,12 @@ def webhook_handler():
             print(f"📱 Message from {sender}: {text}")
             
             # Skip bot messages to prevent loops
-            if any(phrase in text.lower() for phrase in ["sources:", "dermijan.com", "இந্த তকবল් এনদু"]):
+            if any(phrase in text.lower() for phrase in ["sources:", "dermijan.com", "இந্ত তকবল্ এনদু"]):
                 print("🔄 Bot message detected, skipping...")
                 continue
             
-            # Get answer from Perplexity
-            answer = get_perplexity_answer(text)
+            # Get answer from Perplexity with conversation context
+            answer = get_perplexity_answer(text, sender)
             
             # Send reply via WASender
             send_wasender_reply(sender, answer)
@@ -268,24 +350,41 @@ def webhook_handler():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@app.route("/conversation/<user_id>", methods=["GET"])
+def get_conversation(user_id):
+    """Get conversation history for a user (for debugging)"""
+    history = conversation_manager.get_conversation_history(user_id)
+    return jsonify({"user_id": user_id, "conversation": history, "count": len(history)})
+
+
 @app.route("/", methods=["GET"])
 def health_check():
     """Health check endpoint"""
+    try:
+        # Test Redis connection
+        redis_status = "connected" if redis_client.ping() else "disconnected"
+    except:
+        redis_status = "error"
+    
     return jsonify({
         "status": "MCP Dermijan Server Running",
-        "endpoints": ["/ask", "/webhook"],
+        "endpoints": ["/ask", "/webhook", "/conversation/<user_id>"],
         "allowed_urls_count": len(ALLOWED_URLS),
+        "redis_status": redis_status,
         "features": {
             "dermijan_allowlist": True,
             "perplexity_integration": True,
             "wasender_webhook": True,
-            "source_citation": True
+            "conversation_persistence": True,
+            "sliding_window_ttl": "7 days",
+            "max_messages_per_user": 20
         }
     })
 
 
 if __name__ == "__main__":
-    print("🚀 Starting MCP Dermijan Server...")
+    print("🚀 Starting MCP Dermijan Server with Redis...")
     print(f"📋 Loaded {len(ALLOWED_URLS)} allowed dermijan.com URLs")
-    print("🔗 Endpoints: /ask (direct), /webhook (WhatsApp)")
+    print("🔗 Endpoints: /ask (direct), /webhook (WhatsApp), /conversation/<user_id> (debug)")
+    print(f"💾 Redis TTL: 7 days (sliding window)")
     app.run(debug=True, host='0.0.0.0', port=8000)
