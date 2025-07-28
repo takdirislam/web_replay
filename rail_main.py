@@ -3,13 +3,16 @@ import requests
 import json
 import os
 
+
 app = Flask(__name__)
 
-# API Configuration - Environment variables ব্যবহার
-PERPLEXITY_API_KEY = os.environ.get("PERPLEXITY_API_KEY", "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")
-WASENDER_API_TOKEN = os.environ.get("WASENDER_API_TOKEN", "37bf33ac1d6e4e6be8ae324373c2171400a1dd6183c6e501df646eb5f436ef6f")
-WASENDER_SESSION = os.environ.get("WASENDER_SESSION", "TAKDIR")
+
+# API Configuration
+PERPLEXITY_API_KEY = "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"
+WASENDER_API_TOKEN = "37bf33ac1d6e4e6be8ae324373c2171400a1dd6183c6e501df646eb5f436ef6f"
+WASENDER_SESSION = "TAKDIR"
 WASENDER_API_URL = "https://wasenderapi.com/api/send-message"
+
 
 # Dermijan.com Allowlist URLs
 ALLOWED_URLS = [
@@ -83,6 +86,7 @@ ALLOWED_URLS = [
     "https://dermijan.com/achieve-youthful-skin-with-effective-skin-tightening-techniques/"
 ]
 
+
 def get_perplexity_answer(question):
     """Get answer from Perplexity API with dermijan.com restriction"""
     print(f"📥 Question received: {question}")
@@ -94,7 +98,7 @@ def get_perplexity_answer(question):
         f"Question: {question}\n\n"
         "Instructions: Give a SHORT, direct answer (2-3 sentences maximum). "
         "Do NOT use outside information. Only use the provided dermijan.com URLs. "
-        "If answer not found, reply: 'இந்த தகவல் எனது அங்கீகரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை.' "
+        "If answer not found, reply: 'இந்த தகவல் எனது அங்கீகரிक্কப्পட்ট ஆதாரங்களில் கிடைக্கवில்லை.' "
         "Do NOT include source URLs in your response. Keep it very concise."
     )
     
@@ -103,10 +107,10 @@ def get_perplexity_answer(question):
     payload = {
         "model": "sonar",
         "messages": [
-            {"role": "system", "content": "Give very SHORT answers (maximum 2-3 sentences). Do not include source URLs."},
+            {"role": "system", "content": "You are a support assistant for a skin, hair, and body care clinic named *Dermijan*, interacting with customers on WhatsApp.\n\n**Guidelines:**\n\n- Use WhatsApp formatting:\n  - *Bold* for key terms (use asterisks)\n  - Bullets (with hyphens) for lists\n  - Keep replies short and user-friendly (4–6 lines per message)\n\n**Conversation Rules:**\n\n1. **Always address the user's specific query clearly.**\n2. **For any treatment or service question:**\n   - Check Dermijan's official knowledge base or service data before answering.\n   - If the info is unavailable, say:\n     \"That specific detail isn't available right now. Please contact our support team at *dermijanofficialcontact@gmail.com* or *+91 9003444435* for accurate information.\"\n3. **If the user asks for pricing:**\n   - If price is known:\n     \"*Price*: ₹XXXX (approximate, may vary based on consultation)\"\n   - If not available:\n     \"Sorry, this treatment's pricing isn't shared publicly. You can contact our team at *dermijanofficialcontact@gmail.com* or *+91 9003444435* to get the exact rates.\"\n4. **If the user mentions a skin, hair, or body issue (e.g., 'I have a skin issue'):**\n   - Ask follow-up questions to understand the concern:\n     \"I'm here to help! Could you please share more details about the skin issue you're facing? (e.g., since when, symptoms, affected area). This will help us suggest the right treatment.\"\n5. **General behavior:**\n   - Never repeat previous responses.\n   - Always offer the next step:\n     \"Would you like more info about this treatment?\" or \"Can I help you schedule a free consultation?\"\n   - Be polite, friendly, and empathetic—like a real person helping with care."},
             {"role": "user", "content": prompt}
         ],
-        "max_tokens": 1200,
+        "max_tokens": 1200,  # ← Reduced from 600 to 200
         "temperature": 0.1
     }
     
@@ -129,16 +133,17 @@ def get_perplexity_answer(question):
             # Validate response contains allowed URLs (but don't show them)
             used_urls = [u for u in ALLOWED_URLS if u in reply]
             if "இந்த தகவல்" in reply:
-                return "இந்த தகவல் எனது அங்கீகரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை"
+                return "இந்த தகவல் எனது அங்கীকরিক্কप্পট্ট ஆதাரங्களில் கিடைক্கவில্লை"
             
             return reply
         else:
             print(f"❌ Perplexity API error: {response.status_code} - {response.text}")
-            return "மன்னிக்கவும், இந்த நேரத்தில் சேவை வழங்க முடியவில்லை."
+            return "মন্নিক্কবুম্, ইন্দ নেরত্তিল् সেবை বজঙ্গ মুদিয়বিল্লै।"
             
     except Exception as e:
         print(f"❌ Exception: {str(e)}")
-        return "மன்னிக்கவும், சில சிக்கல் ஏற்பட்டுள்ளது."
+        return "মন্নিক্কবুম্, সিল সিক্কল् এর্পট্টুল্লদু।"
+
 
 def remove_source_urls(text):
     """Remove source URLs and references from response"""
@@ -157,6 +162,7 @@ def remove_source_urls(text):
     text = text.strip()
     
     return text
+
 
 def extract_wasender_messages(payload):
     """Extract messages from WASender webhook payload"""
@@ -187,6 +193,7 @@ def extract_wasender_messages(payload):
     
     return messages
 
+
 def send_wasender_reply(to_phone, message):
     """Send reply via WASender API"""
     if not WASENDER_API_TOKEN:
@@ -216,6 +223,7 @@ def send_wasender_reply(to_phone, message):
         print(f"❌ Send error: {str(e)}")
         return False
 
+
 @app.route("/ask", methods=["POST"])
 def ask_question():
     """Direct API endpoint for questions"""
@@ -223,10 +231,11 @@ def ask_question():
     question = data.get("question")
     
     if not question:
-        return jsonify({"reply": "কেল্কী কাছিবক উল্টস!"}), 400
+        return jsonify({"reply": "கেল্বি কালিয়াক উল্লদু!"}), 400
     
     answer = get_perplexity_answer(question)
     return jsonify({"reply": answer})
+
 
 @app.route("/webhook", methods=["POST"])
 def webhook_handler():
@@ -242,7 +251,7 @@ def webhook_handler():
             print(f"📱 Message from {sender}: {text}")
             
             # Skip bot messages to prevent loops
-            if any(phrase in text.lower() for phrase in ["sources:", "dermijan.com", "இந்த তકবল এনাতু"]):
+            if any(phrase in text.lower() for phrase in ["sources:", "dermijan.com", "இந্த তকবল් এনদু"]):
                 print("🔄 Bot message detected, skipping...")
                 continue
             
@@ -257,6 +266,7 @@ def webhook_handler():
     except Exception as e:
         print(f"❌ Webhook error: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @app.route("/", methods=["GET"])
 def health_check():
@@ -273,9 +283,9 @@ def health_check():
         }
     })
 
+
 if __name__ == "__main__":
     print("🚀 Starting MCP Dermijan Server...")
     print(f"📋 Loaded {len(ALLOWED_URLS)} allowed dermijan.com URLs")
     print("🔗 Endpoints: /ask (direct), /webhook (WhatsApp)")
-    port = int(os.environ.get("PORT", 8000))
-    app.run(debug=False, host='0.0.0.0', port=port)
+    app.run(debug=True, host='0.0.0.0', port=8000)
