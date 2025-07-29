@@ -1,11 +1,12 @@
-
 from flask import Flask, request, jsonify
 from datetime import datetime
 import requests, json, os, redis, re
 
+
 app = Flask(__name__)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+
 
 # ────────────────────────────────
 # API Configuration
@@ -14,6 +15,12 @@ PERPLEXITY_API_KEY = "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"
 WASENDER_API_TOKEN = "37bf33ac1d6e4e6be8ae324373c2171400a1dd6183c6e501df646eb5f436ef6f"
 WASENDER_SESSION = "TAKDIR"
 WASENDER_API_URL = "https://wasenderapi.com/api/send-message"
+
+# Call Now Button Configuration
+CALL_NOW_PHONE = "+919003444435"
+CALL_NOW_LABEL = "Call Now"
+CALL_NOW_ID = "call_now_btn"
+
 
 # ────────────────────────────────
 # Dermijan URLs (unchanged)
@@ -89,10 +96,12 @@ ALLOWED_URLS = [
     "https://dermijan.com/achieve-youthful-skin-with-effective-skin-tightening-techniques/"
 ]
 
+
 # ────────────────────────────────
 # Research-Based System Prompt
 # ────────────────────────────────
 SYSTEM_PROMPT = """You are a professional support assistant for Dermijan, a skin, hair and body care clinic, chatting with customers on WhatsApp.
+
 
 CRITICAL LANGUAGE RULES:
 - If user asks in ENGLISH -> Respond ONLY in English
@@ -100,19 +109,23 @@ CRITICAL LANGUAGE RULES:
 - NEVER mix languages in a single response
 - Detect the user's question language first, then respond in the SAME language only
 
+
 RESEARCH-BASED FORMATTING GUIDELINES:
 Based on UX research, apply these proven readability techniques:
+
 
 1. PARAGRAPH STRUCTURE (Nielsen Norman Group research):
    - Maximum 2-3 sentences per paragraph on mobile
    - Use single dot (.) + line break for natural reading pauses
    - Front-load important information in first 2 lines
 
+
 2. BULLET FORMATTING (UXPin studies):
    - Use hyphen (-) for bullet points, not complex symbols
    - Maximum 4-5 bullet points per list
    - Single space between bullet and text
    - Keep bullets parallel in structure
+
 
 3. VISUAL HIERARCHY (Interaction Design Foundation):
    - Start with greeting + context
@@ -121,28 +134,35 @@ Based on UX research, apply these proven readability techniques:
    - Contact/booking info as final element
    - Use line breaks to separate different topics
 
+
 4. MOBILE OPTIMIZATION (WhatsApp Business best practices):
    - Keep responses short (4-6 lines maximum)
    - NO emojis, icons, or special symbols allowed
    - Use *bold* only for key terms, prices, and contact information
    - Ensure scannability - users scan rather than read word-by-word
 
+
 5. WHITESPACE UTILIZATION (Accessibility guidelines):
    - Single line break between related sentences
    - Double line break between different topics
    - Clean spacing around contact information
 
+
 Response Structure Template:
 [Greeting + Context]
 
+
 [Main Information - 1-2 sentences max]
+
 
 [Benefits/Features - if applicable]:
 - [Benefit 1]
 - [Benefit 2] 
 - [Benefit 3]
 
+
 [Next step/Call-to-action]
+
 
 CONVERSATION RULES:
 1. Always address the user's query in the detected language only
@@ -151,11 +171,14 @@ CONVERSATION RULES:
 4. For appointments: Always include phone number with proper formatting
 5. For missing info: Direct to support team professionally
 
+
 Language-Specific Contact Information:
 - English: "To book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
 - Tamil: "அப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை *+91 9003444435* இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
 
+
 Remember: Apply research-backed formatting consistently. Every response should be scannable, mobile-friendly, and follow proven UX patterns."""
+
 
 # ────────────────────────────────
 # Language Detection Function
@@ -172,6 +195,7 @@ def detect_language(text):
     else:
         return "english"  # default to English
 
+
 # ────────────────────────────────
 # Conversation Manager
 # ────────────────────────────────
@@ -179,6 +203,7 @@ class ConversationManager:
     def __init__(self):
         self.ttl = 7 * 24 * 3600
         self.max_msgs = 20
+
 
     def get_history(self, uid):
         try:
@@ -188,6 +213,7 @@ class ConversationManager:
         except Exception as e:
             print("Error getting history:", e)
             return []
+
 
     def store(self, uid, msg, who="user"):
         try:
@@ -199,6 +225,7 @@ class ConversationManager:
         except Exception as e:
             print("Error storing message:", e)
 
+
     def format_context(self, hist):
         if not hist: return ""
         ctx = "Previous conversation:\n"
@@ -207,7 +234,9 @@ class ConversationManager:
             ctx += f"{role}: {m['message']}\n"
         return ctx + "\nCurrent conversation:\n"
 
+
 mgr = ConversationManager()
+
 
 # ────────────────────────────────
 # UX-Optimized Text Processing
@@ -232,15 +261,17 @@ def remove_emojis_and_icons(text):
     
     return text.strip()
 
+
 def detect_appointment_request(text):
     """Enhanced appointment detection based on user behavior research"""
     english_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 
                        'meet', 'appoint', 'booking', 'reserve', 'arrange']
-    tamil_keywords = ['அப்பாய்ன்ட்மென்ট்', 'புக்', 'சந்திப்பு', 'வருகை', 'நேரம்']
+    tamil_keywords = ['அப்பாய்ன்ட்மென்ட்', 'புக்', 'சந்திப்பு', 'வருகை', 'நேரம்']
     
     text_lower = text.lower()
     return (any(keyword in text_lower for keyword in english_keywords) or
             any(keyword in text for keyword in tamil_keywords))
+
 
 def apply_research_based_formatting(text, user_question):
     """Apply UX research-backed formatting for optimal readability"""
@@ -291,6 +322,7 @@ def apply_research_based_formatting(text, user_question):
     
     return text.strip()
 
+
 def clean_source_urls(text):
     """Remove source URLs that harm readability"""
     text = re.sub(r'Sources?:.*$', '', text, flags=re.I|re.M)
@@ -298,6 +330,7 @@ def clean_source_urls(text):
     text = re.sub(r'https?://\S+', '', text)
     text = re.sub(r'dermijan\.com\S*', '', text)
     return re.sub(r'\n\s*\n', '\n', text).strip()
+
 
 # ────────────────────────────────
 # Enhanced Perplexity API Integration
@@ -316,7 +349,7 @@ def get_perplexity_answer(question, uid):
     # Research-based language instructions
     if user_language == "tamil":
         language_instruction = "Respond ONLY in Tamil. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
-        not_found_msg = "அந்த தகவல் எங்கள் அங்கீকரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை. துல்லியமான விவரங்களுக்கு எங்கள் ஆதரவு குழுவை தொடர்பு கொள்ளவும்."
+        not_found_msg = "அந்த தகவல் எங்கள் அங்கீகரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை. துல்லியமான விவரங்களுக்கு எங்கள் ஆதரவு குழுவை தொடர்பு கொள்ளவும்."
     else:
         language_instruction = "Respond ONLY in English. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
         not_found_msg = "That information isn't available in our approved sources. Please contact our support team for accurate details."
@@ -336,6 +369,7 @@ def get_perplexity_answer(question, uid):
         f"Do NOT include source URLs. Focus on scannability and mobile readability."
     )
 
+
     payload = {
         "model": "sonar-pro",
         "messages": [
@@ -346,10 +380,12 @@ def get_perplexity_answer(question, uid):
         "temperature": 0.1
     }
 
+
     headers = {
         "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
         "Content-Type": "application/json"
     }
+
 
     try:
         response = requests.post("https://api.perplexity.ai/chat/completions", 
@@ -379,8 +415,9 @@ def get_perplexity_answer(question, uid):
         else:
             return "Sorry, there was a technical issue.\n\nPlease try again."
 
+
 # ────────────────────────────────
-# WASender Functions (unchanged)
+# WASender Functions with Call Now Button
 # ────────────────────────────────
 def extract_wasender_messages(payload):
     """Extract messages from WASender webhook"""
@@ -404,6 +441,7 @@ def extract_wasender_messages(payload):
         print(f"Message extraction error: {e}")
     
     return messages
+
 
 def send_wasender_reply(to_phone, message):
     """Send UX-optimized reply via WASender API"""
@@ -431,12 +469,65 @@ def send_wasender_reply(to_phone, message):
         print(f"Send error: {e}")
         return False
 
+
+def send_wasender_call_now_button(to, message):
+    """Send message with Call Now button at the bottom"""
+    payload = {
+        "session": WASENDER_SESSION,
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {"text": message},
+            "footer": {"text": ""},
+            "action": {
+                "buttons": [
+                    {
+                        "type": "call",
+                        "text": CALL_NOW_LABEL,
+                        "phone": CALL_NOW_PHONE
+                    }
+                ]
+            }
+        }
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {WASENDER_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        response = requests.post(WASENDER_API_URL, json=payload, headers=headers, timeout=30)
+        success = response.status_code in [200, 201]
+        
+        if success:
+            print("✅ Message with Call Now button sent successfully")
+            return True
+        else:
+            print(f"❌ Call Now button failed: {response.status_code}")
+            # Fallback: Send text with call instruction
+            fallback_message = f"{message}\n\n📞 *Call Now*: {CALL_NOW_PHONE}"
+            return send_wasender_reply(to, fallback_message)
+            
+    except Exception as e:
+        print(f"❌ Call Now button error: {e}")
+        # Fallback: Send text with call instruction
+        fallback_message = f"{message}\n\n📞 *Call Now*: {CALL_NOW_PHONE}"
+        return send_wasender_reply(to, fallback_message)
+
+
+def send_wasender_reply_with_call_button(to, message):
+    """Enhanced version of send_wasender_reply with Call Now button"""
+    return send_wasender_call_now_button(to, message)
+
+
 # ────────────────────────────────
 # Flask Routes
 # ────────────────────────────────
 @app.route("/ask", methods=["POST"])
 def ask_question():
-    """Direct API endpoint with UX optimization"""
+    """Direct API endpoint with Call Now button"""
     data = request.get_json()
     question = data.get("question")
     user_id = data.get("user_id", "anonymous")
@@ -445,11 +536,12 @@ def ask_question():
         return jsonify({"reply": "Please provide a question."}), 400
     
     answer = get_perplexity_answer(question, user_id)
-    return jsonify({"reply": answer})
+    return jsonify({"reply": answer, "call_button": True, "phone": CALL_NOW_PHONE})
+
 
 @app.route("/webhook", methods=["POST"])
 def webhook_handler():
-    """WhatsApp webhook handler with UX optimization"""
+    """WhatsApp webhook handler with Call Now button"""
     try:
         payload = request.get_json()
         messages = extract_wasender_messages(payload)
@@ -461,7 +553,8 @@ def webhook_handler():
                 continue
             
             answer = get_perplexity_answer(text, sender)
-            send_wasender_reply(sender, answer)
+            # Send reply with Call Now button
+            send_wasender_reply_with_call_button(sender, answer)
         
         return jsonify({"status": "success"})
         
@@ -469,15 +562,17 @@ def webhook_handler():
         print(f"Webhook error: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
 @app.route("/conversation/<user_id>", methods=["GET"])
 def get_conversation(user_id):
     """Get conversation history"""
     history = mgr.get_history(user_id)
     return jsonify({"user_id": user_id, "conversation": history, "count": len(history)})
 
+
 @app.route("/", methods=["GET"])
 def health_check():
-    """Health check with UX feature status"""
+    """Health check with Call Now button feature"""
     try:
         redis_status = "connected" if redis_client.ping() else "disconnected"
     except:
@@ -485,7 +580,7 @@ def health_check():
     
     return jsonify({
         "status": "Dermijan Server Running - UX Optimized",
-        "version": "Research-Based User Experience Enhanced",
+        "version": "Research-Based User Experience Enhanced with Call Now",
         "endpoints": ["/ask", "/webhook", "/conversation/<user_id>"],
         "allowed_urls_count": len(ALLOWED_URLS),
         "redis_status": redis_status,
@@ -497,17 +592,20 @@ def health_check():
             "visual_hierarchy_implemented": True,
             "accessibility_compliant": True,
             "whatsapp_pattern_optimized": True,
-            "scanning_friendly_layout": True
+            "scanning_friendly_layout": True,
+            "call_now_button": True,
+            "direct_phone_dialing": True
         }
     })
+
 
 # ────────────────────────────────
 # Main
 # ────────────────────────────────
 if __name__ == "__main__":
-    print("🚀 Starting Dermijan Server - UX Research Enhanced")
+    print("🚀 Starting Dermijan Server - UX Research Enhanced with Call Now")
     print(f"📋 Loaded {len(ALLOWED_URLS)} dermijan.com URLs")
     print("🎯 Features: Research-based formatting, Mobile-optimized, Visual hierarchy")
     print("✨ UX Enhancements: Short paragraphs, Strategic dots/hyphens, Scannable layout")
-    print("📱 Mobile-first readability, Language-specific responses, Accessibility compliant")
+    print("📱 Mobile-first readability, Language-specific responses, Call Now button")
     app.run(debug=True, host='0.0.0.0', port=8000)
