@@ -1,11 +1,11 @@
 """
-Dermijan Chatbot - Professional Format (Emoji-free)
-Version: 2025-07-29 Final
+Dermijan Chatbot - Language Specific Responses
+Version: 2025-07-29 Final Update
 Features:
-• No emojis/icons - professional text only
-• Automatic appointment handling with phone number
-• English and Tamil responses only
-• Clean formatting with bold text and hyphens
+• Language detection: English question -> English response, Tamil question -> Tamil response
+• No language mixing allowed
+• Single asterisk (*) for bold formatting
+• Professional format without emojis
 """
 
 from flask import Flask, request, jsonify
@@ -99,32 +99,58 @@ ALLOWED_URLS = [
 ]
 
 # ────────────────────────────────
-# System Prompt (Emoji-free)
+# System Prompt (Language Specific)
 # ────────────────────────────────
 SYSTEM_PROMPT = """You are a support assistant for Dermijan, a skin, hair and body care clinic, chatting with customers on WhatsApp.
 
+CRITICAL LANGUAGE RULES:
+- If user asks in ENGLISH -> Respond ONLY in English
+- If user asks in TAMIL -> Respond ONLY in Tamil  
+- NEVER mix languages in a single response
+- Detect the user's question language first, then respond in the SAME language only
+
 Guidelines:
-- Use simple and natural English (not overly professional)
+- Use simple and natural language (not overly professional)
 - NO emojis, icons, or special symbols allowed
-- Use *Bold* for key terms, prices, and important information
+- Use single asterisk (*) for bold formatting: *important text*
 - Use hyphens (-) for bullet points
 - Keep replies short and friendly (4-6 lines maximum)
 - Line breaks for better readability
 
 Response Rules:
-1. Always address the user's query clearly
+1. Always address the user's query clearly in the SAME language they used
 2. For treatment or service questions:
    - Use only information from provided dermijan.com sources
-   - If info unavailable, say: "That specific detail isn't available right now. Please contact our support team at *dermijanofficialcontact@gmail.com* or *+91 9003444435* for accurate information."
+   - If info unavailable:
+     * English: "That specific detail isn't available right now. Please contact our support team at *dermijanofficialcontact@gmail.com* or *+91 9003444435* for accurate information."
+     * Tamil: "அந்த குறிப்பிட்ட விவரம் இப்போது கிடைக்கவில்லை. துல்லியமான தகவலுக்கு எங்கள் ஆதரவு குழுவை *dermijanofficialcontact@gmail.com* அல்லது *+91 9003444435* இல் தொடர்பு கொள்ளவும்."
 3. For pricing questions:
    - If known: "*Price*: Rs.XXXX (approximate, may vary based on consultation)"
-   - If unknown: "Sorry, this treatment's pricing isn't shared publicly. You can contact our team at *dermijanofficialcontact@gmail.com* or *+91 9003444435* to get exact rates."
+   - If unknown: Contact support message in user's language
 4. For appointment/booking requests:
-   - ALWAYS include: "To book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
+   - English: "To book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
+   - Tamil: "அப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை *+91 9003444435* இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
 5. For skin/hair/body issues:
-   - Ask follow-up questions: "I'm here to help! Could you please share more details about the issue you're facing? This will help us suggest the right treatment."
+   - Ask follow-up questions in user's language to understand the concern better
 
-Language: Respond in English and Tamil only. Keep tone friendly but professional."""
+Remember: STRICT language separation - English questions get English responses, Tamil questions get Tamil responses."""
+
+# ────────────────────────────────
+# Language Detection Function
+# ────────────────────────────────
+def detect_language(text):
+    """Detect if text is primarily English or Tamil"""
+    # Tamil Unicode range detection
+    tamil_chars = re.findall(r'[\u0B80-\u0BFF]', text)
+    english_words = re.findall(r'[a-zA-Z]+', text)
+    
+    # Simple detection logic
+    if len(tamil_chars) > len(english_words):
+        return "tamil"
+    elif len(english_words) > 0:
+        return "english"
+    else:
+        return "english"  # default to English
 
 # ────────────────────────────────
 # Conversation Manager
@@ -168,7 +194,6 @@ mgr = ConversationManager()
 # ────────────────────────────────
 def remove_emojis_and_icons(text):
     """Remove all emojis, icons and special symbols"""
-    # Unicode emoji patterns
     emoji_pattern = re.compile("["
         u"\U0001F600-\U0001F64F"  # emoticons
         u"\U0001F300-\U0001F5FF"  # symbols & pictographs
@@ -178,7 +203,7 @@ def remove_emojis_and_icons(text):
     
     text = emoji_pattern.sub('', text)
     
-    # Remove specific symbols that might slip through
+    # Remove specific symbols
     symbols_to_remove = ['✨', '💆', '💇', '💪', '⏰', '🌟', '💡', '📞', '📅', 
                         '💰', '💯', '🔥', '💫', '👑', '✅', '☑️', '⚠️', '❌']
     
@@ -189,25 +214,45 @@ def remove_emojis_and_icons(text):
 
 def detect_appointment_request(text):
     """Check if user is requesting appointment/booking"""
-    appointment_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 
-                           'meet', 'appoint', 'booking', 'reserve']
-    return any(keyword in text.lower() for keyword in appointment_keywords)
+    english_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 
+                       'meet', 'appoint', 'booking', 'reserve']
+    tamil_keywords = ['அப்பாய்ன்ட்மென்ட்', 'புக்', 'சந்திப்பு', 'வருகை']
+    
+    text_lower = text.lower()
+    return (any(keyword in text_lower for keyword in english_keywords) or
+            any(keyword in text for keyword in tamil_keywords))
+
+def fix_bold_formatting(text):
+    """Convert double asterisks to single asterisks for bold"""
+    # Replace **text** with *text*
+    text = re.sub(r'\*\*([^*]+)\*\*', r'*\1*', text)
+    return text
 
 def format_professional_response(reply, user_question):
     """Format response professionally without emojis"""
-    # Remove any emojis that might exist
+    # Remove any emojis
     reply = remove_emojis_and_icons(reply)
+    
+    # Fix bold formatting (** -> *)
+    reply = fix_bold_formatting(reply)
+    
+    # Detect user's language
+    user_language = detect_language(user_question)
     
     # Add appointment info if requested
     if detect_appointment_request(user_question):
-        appointment_text = "\n\nTo book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
+        if user_language == "tamil":
+            appointment_text = "\n\nஅப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை *+91 9003444435* இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
+        else:
+            appointment_text = "\n\nTo book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
+        
         if appointment_text not in reply:
             reply += appointment_text
     
     # Clean up formatting
     reply = reply.replace(". ", ".\n\n")
     
-    # Highlight contact info
+    # Highlight contact info with single asterisk
     reply = reply.replace("dermijanofficialcontact@gmail.com", "*dermijanofficialcontact@gmail.com*")
     reply = reply.replace("+91 9003444435", "*+91 9003444435*")
     
@@ -228,21 +273,33 @@ def clean_source_urls(text):
 # Perplexity API
 # ────────────────────────────────
 def get_perplexity_answer(question, uid):
-    """Get answer from Perplexity API"""
+    """Get answer from Perplexity API with language detection"""
     print(f"Question from {uid}: {question}")
+    
+    # Detect user's language
+    user_language = detect_language(question)
+    print(f"Detected language: {user_language}")
     
     hist = mgr.get_history(uid)
     ctx = mgr.format_context(hist)
     
+    # Language-specific instructions
+    if user_language == "tamil":
+        language_instruction = "Respond ONLY in Tamil language. Do not use any English words."
+        not_found_msg = "அந்த தகவல் எங்கள் அங்கீகரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை. துல்லியமான விவரங்களுக்கு எங்கள் ஆதரவு குழுவை தொடர்பு கொள்ளவும்."
+    else:
+        language_instruction = "Respond ONLY in English language. Do not use any Tamil words."
+        not_found_msg = "That information isn't available in our approved sources. Please contact our support team for accurate details."
+    
     user_prompt = (
-        "Answer using ONLY information from these dermijan.com pages:\n"
+        f"Answer using ONLY information from these dermijan.com pages:\n"
         + "\n".join(ALLOWED_URLS) + "\n\n"
         + ctx + f"User: {question}\n\n"
-        "Instructions: Give a SHORT answer (4-6 lines max) in simple English and Tamil. "
-        "Use *bold* for key info. NO emojis or icons allowed. "
-        "If answer not found, reply: 'That information isn't available in our approved sources. "
-        "Please contact our support team for accurate details.' "
-        "Do NOT include source URLs in your response."
+        f"Instructions: {language_instruction} "
+        f"Give a SHORT answer (4-6 lines max). "
+        f"Use single asterisk (*) for bold formatting. NO emojis or icons allowed. "
+        f"If answer not found, reply: '{not_found_msg}' "
+        f"Do NOT include source URLs in your response."
     )
 
     payload = {
@@ -276,14 +333,20 @@ def get_perplexity_answer(question, uid):
             return formatted_reply
         else:
             print(f"Perplexity API error: {response.status_code} - {response.text}")
-            return "Sorry, our service is temporarily unavailable. Please try again later."
+            if user_language == "tamil":
+                return "மன்னிக்கவும், எங்கள் சேவை தற்காலிகமாக கிடைக்கவில்லை. பிறகு முயற்சிக்கவும்."
+            else:
+                return "Sorry, our service is temporarily unavailable. Please try again later."
             
     except Exception as e:
         print(f"Perplexity exception: {e}")
-        return "Sorry, there was a technical issue. Please try again."
+        if user_language == "tamil":
+            return "மன்னிக்கவும், தொழில்நுட்ப சிக்கல் ஏற்பட்டது. பிறகு முயற்சிக்கவும்."
+        else:
+            return "Sorry, there was a technical issue. Please try again."
 
 # ────────────────────────────────
-# WASender Functions
+# WASender Functions (unchanged)
 # ────────────────────────────────
 def extract_wasender_messages(payload):
     """Extract messages from WASender webhook"""
@@ -335,7 +398,7 @@ def send_wasender_reply(to_phone, message):
         return False
 
 # ────────────────────────────────
-# Flask Routes
+# Flask Routes (unchanged)
 # ────────────────────────────────
 @app.route("/ask", methods=["POST"])
 def ask_question():
@@ -388,16 +451,17 @@ def health_check():
     
     return jsonify({
         "status": "Dermijan Server Running",
-        "version": "Professional Format (Emoji-free)",
+        "version": "Language Specific Responses",
         "endpoints": ["/ask", "/webhook", "/conversation/<user_id>"],
         "allowed_urls_count": len(ALLOWED_URLS),
         "redis_status": redis_status,
         "features": {
+            "language_detection": True,
+            "english_only_responses": True,
+            "tamil_only_responses": True,
+            "single_asterisk_bold": True,
             "emoji_free": True,
-            "professional_formatting": True,
-            "appointment_handling": True,
-            "english_tamil_only": True,
-            "conversation_persistence": True
+            "appointment_handling": True
         }
     })
 
@@ -405,8 +469,8 @@ def health_check():
 # Main
 # ────────────────────────────────
 if __name__ == "__main__":
-    print("🚀 Starting Dermijan Server (Professional Format)")
+    print("🚀 Starting Dermijan Server (Language Specific)")
     print(f"📋 Loaded {len(ALLOWED_URLS)} dermijan.com URLs")
-    print("🔗 Endpoints: /ask, /webhook, /conversation/<user_id>")
-    print("✨ Features: Emoji-free, Auto appointment handling, English+Tamil responses")
+    print("🔗 Features: English->English, Tamil->Tamil, Single * bold")
+    print("✨ No language mixing, Professional format")
     app.run(debug=True, host='0.0.0.0', port=8000)
