@@ -174,7 +174,7 @@ CONVERSATION RULES:
 
 Language-Specific Contact Information:
 - English: "To book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
-- Tamil: "அப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை *+91 9003444435* இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
+- Tamil: "அப்பாய்ன்ட்மென்ট் புக் செய்ய, தயவுசெய்து எங்களை *+91 9003444435* இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
 
 
 Remember: Apply research-backed formatting consistently. Every response should be scannable, mobile-friendly, and follow proven UX patterns."""
@@ -306,7 +306,7 @@ def apply_research_based_formatting(text, user_question):
     # Add appointment info based on UX research on call-to-action placement
     if detect_appointment_request(user_question):
         if user_language == "tamil":
-            appointment_text = "\n\nஅப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை *+91 9003444435* இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
+            appointment_text = "\n\nஅப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவুசெய়து எங்களை *+91 9003444435* இল் அழைக்கவும், எং்கল் তোদর্পு কুঝু বিরৈবিল் উং্গলাই তোদর্পু কোল্লুম্।"
         else:
             appointment_text = "\n\nTo book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
         
@@ -349,7 +349,7 @@ def get_perplexity_answer(question, uid):
     # Research-based language instructions
     if user_language == "tamil":
         language_instruction = "Respond ONLY in Tamil. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
-        not_found_msg = "அந்த தகவல் எங்கள் அங்கீகரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை. துல்லியமான விவரங்களுக்கு எங்கள் ஆதரவு குழுவை தொடர்பு கொள்ளவும்."
+        not_found_msg = "அந்த তকবল েং্கল অং্কীকরিক্কপ্পট্ট আদারং্গলিল কিডৈক্কবিল্লাই। তুল্লিয়মান বিবরং্গলুক্কু এং্কল আদরবু কুঝুবাই তোদর্পু কোল্লবুম্।"
     else:
         language_instruction = "Respond ONLY in English. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
         not_found_msg = "That information isn't available in our approved sources. Please contact our support team for accurate details."
@@ -404,14 +404,14 @@ def get_perplexity_answer(question, uid):
         else:
             print(f"Perplexity API error: {response.status_code} - {response.text}")
             if user_language == "tamil":
-                return "மன்னிக்கவும், எங்கள் சேவை தற்காலிகமாக கிடைக்கவில்லை.\n\nபிறகு முயற்சிக்கவும்."
+                return "মন্নিক্কবুম্, এং্কল সেবৈ তর্কালিকমাক কিডৈক্কবিল্লাই.\n\nপিরকু মুয়র্সিক্কবুম্।"
             else:
                 return "Sorry, our service is temporarily unavailable.\n\nPlease try again later."
             
     except Exception as e:
         print(f"Perplexity exception: {e}")
         if user_language == "tamil":
-            return "மன்னிக்கவும், தொழில்நுட்ப சிக்கல் ஏற்பட்டது.\n\nபிறகு முயற்சிக்கவும்."
+            return "মন্নিক্কবুম্, তোঝিল্নুট্প সিক্কল এর্পট্টদু.\n\nপিরকু মুয়র্সিক্কবুম্।"
         else:
             return "Sorry, there was a technical issue.\n\nPlease try again."
 
@@ -470,11 +470,16 @@ def send_wasender_reply(to_phone, message):
         return False
 
 
-def send_wasender_call_now_button(to, message):
+def send_wasender_with_call_button(to_phone, message):
     """Send message with Call Now button at the bottom"""
-    payload = {
+    if not WASENDER_API_TOKEN:
+        print("WASender API token missing")
+        return send_wasender_reply(to_phone, f"{message}\n\n📞 Call Now: {CALL_NOW_PHONE}")
+    
+    # Try interactive button first
+    interactive_payload = {
         "session": WASENDER_SESSION,
-        "to": to,
+        "to": to_phone,
         "type": "interactive",
         "interactive": {
             "type": "button",
@@ -498,7 +503,7 @@ def send_wasender_call_now_button(to, message):
     }
     
     try:
-        response = requests.post(WASENDER_API_URL, json=payload, headers=headers, timeout=30)
+        response = requests.post(WASENDER_API_URL, json=interactive_payload, headers=headers, timeout=30)
         success = response.status_code in [200, 201]
         
         if success:
@@ -508,18 +513,13 @@ def send_wasender_call_now_button(to, message):
             print(f"❌ Call Now button failed: {response.status_code}")
             # Fallback: Send text with call instruction
             fallback_message = f"{message}\n\n📞 *Call Now*: {CALL_NOW_PHONE}"
-            return send_wasender_reply(to, fallback_message)
+            return send_wasender_reply(to_phone, fallback_message)
             
     except Exception as e:
         print(f"❌ Call Now button error: {e}")
         # Fallback: Send text with call instruction
         fallback_message = f"{message}\n\n📞 *Call Now*: {CALL_NOW_PHONE}"
-        return send_wasender_reply(to, fallback_message)
-
-
-def send_wasender_reply_with_call_button(to, message):
-    """Enhanced version of send_wasender_reply with Call Now button"""
-    return send_wasender_call_now_button(to, message)
+        return send_wasender_reply(to_phone, fallback_message)
 
 
 # ────────────────────────────────
@@ -527,7 +527,7 @@ def send_wasender_reply_with_call_button(to, message):
 # ────────────────────────────────
 @app.route("/ask", methods=["POST"])
 def ask_question():
-    """Direct API endpoint with Call Now button"""
+    """Direct API endpoint with UX optimization"""
     data = request.get_json()
     question = data.get("question")
     user_id = data.get("user_id", "anonymous")
@@ -536,7 +536,7 @@ def ask_question():
         return jsonify({"reply": "Please provide a question."}), 400
     
     answer = get_perplexity_answer(question, user_id)
-    return jsonify({"reply": answer, "call_button": True, "phone": CALL_NOW_PHONE})
+    return jsonify({"reply": answer})
 
 
 @app.route("/webhook", methods=["POST"])
@@ -554,7 +554,7 @@ def webhook_handler():
             
             answer = get_perplexity_answer(text, sender)
             # Send reply with Call Now button
-            send_wasender_reply_with_call_button(sender, answer)
+            send_wasender_with_call_button(sender, answer)
         
         return jsonify({"status": "success"})
         
@@ -603,7 +603,7 @@ def health_check():
 # Main
 # ────────────────────────────────
 if __name__ == "__main__":
-    print("🚀 Starting Dermijan Server - UX Research Enhanced with Call Now")
+    print("🚀 Starting Dermijan Server - UX Research Enhanced")
     print(f"📋 Loaded {len(ALLOWED_URLS)} dermijan.com URLs")
     print("🎯 Features: Research-based formatting, Mobile-optimized, Visual hierarchy")
     print("✨ UX Enhancements: Short paragraphs, Strategic dots/hyphens, Scannable layout")
