@@ -1,24 +1,31 @@
+"""
+Dermijan Chatbot - Professional Format (Emoji-free)
+Version: 2025-07-29 Final
+Features:
+• No emojis/icons - professional text only
+• Automatic appointment handling with phone number
+• English and Tamil responses only
+• Clean formatting with bold text and hyphens
+"""
+
 from flask import Flask, request, jsonify
 from datetime import datetime
 import requests, json, os, redis, re
 
-# ────────────────────────────────
-# 1. Flask & Redis setup
-# ────────────────────────────────
 app = Flask(__name__)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 # ────────────────────────────────
-# 2. API credentials
+# API Configuration
 # ────────────────────────────────
 PERPLEXITY_API_KEY = "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"
 WASENDER_API_TOKEN = "37bf33ac1d6e4e6be8ae324373c2171400a1dd6183c6e501df646eb5f436ef6f"
-WASENDER_SESSION   = "TAKDIR"
-WASENDER_API_URL   = "https://wasenderapi.com/api/send-message"
+WASENDER_SESSION = "TAKDIR"
+WASENDER_API_URL = "https://wasenderapi.com/api/send-message"
 
 # ────────────────────────────────
-# 3. Allow-listed Dermijan URLs
+# Dermijan URLs (unchanged)
 # ────────────────────────────────
 ALLOWED_URLS = [
     "https://dermijan.com/",
@@ -92,55 +99,61 @@ ALLOWED_URLS = [
 ]
 
 # ────────────────────────────────
-# 4. System prompt (ONE string)
+# System Prompt (Emoji-free)
 # ────────────────────────────────
-SYSTEM_PROMPT = (
-    "You are a support assistant for *Dermijan*, a skin-, hair- and body-care clinic, "
-    "chatting on WhatsApp.\n\n"
-    "Guidelines:\n"
-    "- Use WhatsApp *Bold* for key terms\n"
-    "- Add relevant emojis per service\n"
-    "- Bullet lists with hyphens; max 4-6 short lines\n"
-    "- Maintain a professional yet friendly, mildly urgent tone\n\n"
-    "Service Emojis:\n"
-    "• Skin care: ✨💆‍♀️🌟💅  • Hair care: 💇‍♀️💁‍♀️🔥💫  • Body: 💪🏻📈  • Anti-aging: ⏰✨\n\n"
-    "Response structure: Greeting + emoji → *Bold* info → bullets → CTA + contact\n"
-    "Conversation rules: Missing info ⇒ ask user to contact support; pricing format ⇒ "
-    "💰 *Price*: ₹XXXX (approx).\n"
-)
+SYSTEM_PROMPT = """You are a support assistant for Dermijan, a skin, hair and body care clinic, chatting with customers on WhatsApp.
+
+Guidelines:
+- Use simple and natural English (not overly professional)
+- NO emojis, icons, or special symbols allowed
+- Use *Bold* for key terms, prices, and important information
+- Use hyphens (-) for bullet points
+- Keep replies short and friendly (4-6 lines maximum)
+- Line breaks for better readability
+
+Response Rules:
+1. Always address the user's query clearly
+2. For treatment or service questions:
+   - Use only information from provided dermijan.com sources
+   - If info unavailable, say: "That specific detail isn't available right now. Please contact our support team at *dermijanofficialcontact@gmail.com* or *+91 9003444435* for accurate information."
+3. For pricing questions:
+   - If known: "*Price*: Rs.XXXX (approximate, may vary based on consultation)"
+   - If unknown: "Sorry, this treatment's pricing isn't shared publicly. You can contact our team at *dermijanofficialcontact@gmail.com* or *+91 9003444435* to get exact rates."
+4. For appointment/booking requests:
+   - ALWAYS include: "To book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
+5. For skin/hair/body issues:
+   - Ask follow-up questions: "I'm here to help! Could you please share more details about the issue you're facing? This will help us suggest the right treatment."
+
+Language: Respond in English and Tamil only. Keep tone friendly but professional."""
 
 # ────────────────────────────────
-# 5. Conversation manager
+# Conversation Manager
 # ────────────────────────────────
 class ConversationManager:
     def __init__(self):
         self.ttl = 7 * 24 * 3600
         self.max_msgs = 20
 
-    def _key(self, uid): return f"whatsapp_chat:{uid}"
-
     def get_history(self, uid):
         try:
-            hist = self._fetch(uid)
-            return [json.loads(m) for m in reversed(hist)]
+            key = f"whatsapp_chat:{uid}"
+            msgs = redis_client.lrange(key, 0, -1)
+            return [json.loads(m) for m in reversed(msgs)]
         except Exception as e:
-            print("❌ history", e); return []
-
-    def _fetch(self, uid):
-        return redis_client.lrange(self._key(uid), 0, -1)
+            print("Error getting history:", e)
+            return []
 
     def store(self, uid, msg, who="user"):
         try:
-            redis_client.lpush(self._key(uid),
-                               json.dumps({"message": msg,
-                                           "sender": who,
-                                           "ts": datetime.now().isoformat()}))
-            redis_client.ltrim(self._key(uid), 0, self.max_msgs-1)
-            redis_client.expire(self._key(uid), self.ttl)
+            key = f"whatsapp_chat:{uid}"
+            data = {"message": msg, "sender": who, "timestamp": datetime.now().isoformat()}
+            redis_client.lpush(key, json.dumps(data))
+            redis_client.ltrim(key, 0, self.max_msgs-1)
+            redis_client.expire(key, self.ttl)
         except Exception as e:
-            print("❌ store", e)
+            print("Error storing message:", e)
 
-    def context(self, hist):
+    def format_context(self, hist):
         if not hist: return ""
         ctx = "Previous conversation:\n"
         for m in hist[-10:]:
@@ -151,141 +164,249 @@ class ConversationManager:
 mgr = ConversationManager()
 
 # ────────────────────────────────
-# 6. Emoji & formatting helpers
+# Text Processing Functions
 # ────────────────────────────────
-def pick_emoji(txt):
-    t = txt.lower()
-    if any(k in t for k in ["skin", "acne", "facial", "scar"]):          return "✨💆‍♀️"
-    if any(k in t for k in ["hair", "dandruff", "transplant"]):          return "💇‍♀️💁‍♀️"
-    if any(k in t for k in ["body", "weight", "toning", "sculpt"]):      return "💪🏻📈"
-    if any(k in t for k in ["aging", "wrinkle"]):                        return "⏰✨"
-    if any(k in t for k in ["price", "cost", "rate"]):                   return "💰💯"
-    return "🌟💡"
+def remove_emojis_and_icons(text):
+    """Remove all emojis, icons and special symbols"""
+    # Unicode emoji patterns
+    emoji_pattern = re.compile("["
+        u"\U0001F600-\U0001F64F"  # emoticons
+        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+        u"\U0001F680-\U0001F6FF"  # transport & map
+        u"\U0001F1E0-\U0001F1FF"  # flags
+        "]+", flags=re.UNICODE)
+    
+    text = emoji_pattern.sub('', text)
+    
+    # Remove specific symbols that might slip through
+    symbols_to_remove = ['✨', '💆', '💇', '💪', '⏰', '🌟', '💡', '📞', '📅', 
+                        '💰', '💯', '🔥', '💫', '👑', '✅', '☑️', '⚠️', '❌']
+    
+    for symbol in symbols_to_remove:
+        text = text.replace(symbol, '')
+    
+    return text.strip()
 
-def format_reply(raw, q):
-    em = pick_emoji(q + " " + raw)
-    if em not in raw[:5]:
-        raw = f"{em} {raw}"
-    raw = raw.replace(". ", ".\n\n")
-    raw = raw.replace("dermijanofficialcontact@gmail.com",
-                      "*dermijanofficialcontact@gmail.com*")
-    raw = raw.replace("+91 9003444435", "*+91 9003444435*")
-    return raw.strip()
+def detect_appointment_request(text):
+    """Check if user is requesting appointment/booking"""
+    appointment_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 
+                           'meet', 'appoint', 'booking', 'reserve']
+    return any(keyword in text.lower() for keyword in appointment_keywords)
+
+def format_professional_response(reply, user_question):
+    """Format response professionally without emojis"""
+    # Remove any emojis that might exist
+    reply = remove_emojis_and_icons(reply)
+    
+    # Add appointment info if requested
+    if detect_appointment_request(user_question):
+        appointment_text = "\n\nTo book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
+        if appointment_text not in reply:
+            reply += appointment_text
+    
+    # Clean up formatting
+    reply = reply.replace(". ", ".\n\n")
+    
+    # Highlight contact info
+    reply = reply.replace("dermijanofficialcontact@gmail.com", "*dermijanofficialcontact@gmail.com*")
+    reply = reply.replace("+91 9003444435", "*+91 9003444435*")
+    
+    # Remove extra whitespace
+    reply = re.sub(r'\n\s*\n\s*\n', '\n\n', reply)
+    
+    return reply.strip()
+
+def clean_source_urls(text):
+    """Remove source URLs and references"""
+    text = re.sub(r'Sources?:.*$', '', text, flags=re.I|re.M)
+    text = re.sub(r'Reference:.*$', '', text, flags=re.I|re.M)
+    text = re.sub(r'https?://\S+', '', text)
+    text = re.sub(r'dermijan\.com\S*', '', text)
+    return re.sub(r'\n\s*\n', '\n', text).strip()
 
 # ────────────────────────────────
-# 7. Perplexity client
+# Perplexity API
 # ────────────────────────────────
-PPLX_URL = "https://api.perplexity.ai/chat/completions"
-def scrub(text):
-    text = re.sub(r"Sources?:.*$", "", text, flags=re.I|re.M)
-    text = re.sub(r"https?://\S+", "", text)
-    text = re.sub(r"dermijan\.com\S*", "", text)
-    return re.sub(r"\n\s*\n", "\n", text).strip()
-
-def _debug_messages(payload):
-    for i, m in enumerate(payload["messages"]):
-        print(i, type(m["content"]))
-
-def ask_pplx(question, uid):
-    hist  = mgr.get_history(uid)
-    ctx   = mgr.context(hist)
+def get_perplexity_answer(question, uid):
+    """Get answer from Perplexity API"""
+    print(f"Question from {uid}: {question}")
+    
+    hist = mgr.get_history(uid)
+    ctx = mgr.format_context(hist)
+    
     user_prompt = (
-        "🌟 Answer enthusiastically using ONLY these Dermijan pages:\n"
+        "Answer using ONLY information from these dermijan.com pages:\n"
         + "\n".join(ALLOWED_URLS) + "\n\n"
         + ctx + f"User: {question}\n\n"
-        "Instr: 4-6 lines, emojis, *bold* key info, friendly. "
-        "If not found, reply: '✨ Information not found, contact support.📞'"
+        "Instructions: Give a SHORT answer (4-6 lines max) in simple English and Tamil. "
+        "Use *bold* for key info. NO emojis or icons allowed. "
+        "If answer not found, reply: 'That information isn't available in our approved sources. "
+        "Please contact our support team for accurate details.' "
+        "Do NOT include source URLs in your response."
     )
 
     payload = {
         "model": "sonar-pro",
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": user_prompt}
+            {"role": "user", "content": user_prompt}
         ],
         "max_tokens": 1000,
         "temperature": 0.1
     }
 
-    _debug_messages(payload)           # type-check → all should be <class 'str'>
-
-    headers = {"Authorization": f"Bearer {PERPLEXITY_API_KEY}",
-               "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+        "Content-Type": "application/json"
+    }
 
     try:
-        r = requests.post(PPLX_URL, json=payload, headers=headers, timeout=30)
-        if r.status_code == 200:
-            ans = scrub(r.json()["choices"][0]["message"]["content"])
-            ans = format_reply(ans, question)
+        response = requests.post("https://api.perplexity.ai/chat/completions", 
+                               json=payload, headers=headers, timeout=30)
+        
+        if response.status_code == 200:
+            raw_reply = response.json()["choices"][0]["message"]["content"]
+            clean_reply = clean_source_urls(raw_reply)
+            formatted_reply = format_professional_response(clean_reply, question)
+            
+            # Store conversation
             mgr.store(uid, question, "user")
-            mgr.store(uid, ans, "bot")
-            return ans
-        print("❌ PPLX", r.status_code, r.text)
-        return "Sorry, the server is currently experiencing problems. Please try again later.। 🤖"
+            mgr.store(uid, formatted_reply, "bot")
+            
+            return formatted_reply
+        else:
+            print(f"Perplexity API error: {response.status_code} - {response.text}")
+            return "Sorry, our service is temporarily unavailable. Please try again later."
+            
     except Exception as e:
-        print("❌ PPLX ex", e)
-        return "Sorry, the server is currently experiencing problems. Please try again later.। 🚧"
+        print(f"Perplexity exception: {e}")
+        return "Sorry, there was a technical issue. Please try again."
 
 # ────────────────────────────────
-# 8. WASender utilities
+# WASender Functions
 # ────────────────────────────────
-def parse_wasender(payload):
-    out = []
+def extract_wasender_messages(payload):
+    """Extract messages from WASender webhook"""
+    messages = []
     try:
         if payload.get("event") == "messages.upsert":
-            m = payload["data"]["messages"]
-            sender = m["key"]["remoteJid"].split("@")[0].lstrip("+")
-            msg    = m["message"].get("conversation") or \
-                     m["message"].get("extendedTextMessage", {}).get("text", "")
-            if sender and msg: out.append((sender, msg))
+            data = payload.get("data", {}).get("messages", {})
+            sender = data.get("key", {}).get("remoteJid", "").replace("@s.whatsapp.net", "").replace("+", "")
+            
+            message_content = data.get("message", {})
+            text = ""
+            if "conversation" in message_content:
+                text = message_content["conversation"]
+            elif "extendedTextMessage" in message_content:
+                text = message_content["extendedTextMessage"].get("text", "")
+            
+            if sender and text:
+                messages.append((sender, text))
+                
     except Exception as e:
-        print("❌ parse_wasender", e)
-    return out
+        print(f"Message extraction error: {e}")
+    
+    return messages
 
-def send_wasender(to, text):
-    if not WASENDER_API_TOKEN: return False
-    res = requests.post(WASENDER_API_URL,
-                        headers={"Authorization": f"Bearer {WASENDER_API_TOKEN}",
-                                 "Content-Type": "application/json"},
-                        json={"session": WASENDER_SESSION, "to": to, "text": text})
-    ok = res.status_code in (200, 201)
-    print("✅" if ok else "❌", "send_wasender", res.status_code)
-    return ok
-
-# ────────────────────────────────
-# 9. Flask routes
-# ────────────────────────────────
-@app.post("/ask")
-def ask():
-    data = request.get_json(force=True)
-    q    = data.get("question")
-    uid  = data.get("user_id", "anon")
-    if not q: return jsonify({"reply": "Ask Question।"}), 400
-    return jsonify({"reply": ask_pplx(q, uid)})
-
-@app.post("/webhook")
-def webhook():
-    for sender, txt in parse_wasender(request.get_json(force=True)):
-        if any(k in txt.lower() for k in ["sources:", "dermijan.com"]): continue
-        ans = ask_pplx(txt, sender)
-        send_wasender(sender, ans)
-    return jsonify({"status": "ok"})
-
-@app.get("/conversation/<uid>")
-def conv(uid):
-    hist = mgr.get_history(uid)
-    return jsonify({"user": uid, "count": len(hist), "conversation": hist})
-
-@app.get("/")
-def health():
-    try: rd = "connected" if redis_client.ping() else "disconnected"
-    except: rd = "error"
-    return jsonify({"status": "running", "redis": rd,
-                    "allowed_urls": len(ALLOWED_URLS)})
+def send_wasender_reply(to_phone, message):
+    """Send reply via WASender API"""
+    if not WASENDER_API_TOKEN:
+        print("WASender API token missing")
+        return False
+    
+    payload = {
+        "session": WASENDER_SESSION,
+        "to": to_phone,
+        "text": message
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {WASENDER_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        response = requests.post(WASENDER_API_URL, json=payload, headers=headers)
+        success = response.status_code in [200, 201]
+        print("Message sent successfully" if success else f"Send error: {response.status_code}")
+        return success
+    except Exception as e:
+        print(f"Send error: {e}")
+        return False
 
 # ────────────────────────────────
-# 10. Main
+# Flask Routes
+# ────────────────────────────────
+@app.route("/ask", methods=["POST"])
+def ask_question():
+    """Direct API endpoint"""
+    data = request.get_json()
+    question = data.get("question")
+    user_id = data.get("user_id", "anonymous")
+    
+    if not question:
+        return jsonify({"reply": "Please provide a question."}), 400
+    
+    answer = get_perplexity_answer(question, user_id)
+    return jsonify({"reply": answer})
+
+@app.route("/webhook", methods=["POST"])
+def webhook_handler():
+    """WhatsApp webhook handler"""
+    try:
+        payload = request.get_json()
+        messages = extract_wasender_messages(payload)
+        
+        for sender, text in messages:
+            # Skip bot messages to prevent loops
+            skip_phrases = ["Sources:", "dermijan.com", "isn't available in our approved sources"]
+            if any(phrase.lower() in text.lower() for phrase in skip_phrases):
+                continue
+            
+            answer = get_perplexity_answer(text, sender)
+            send_wasender_reply(sender, answer)
+        
+        return jsonify({"status": "success"})
+        
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/conversation/<user_id>", methods=["GET"])
+def get_conversation(user_id):
+    """Get conversation history"""
+    history = mgr.get_history(user_id)
+    return jsonify({"user_id": user_id, "conversation": history, "count": len(history)})
+
+@app.route("/", methods=["GET"])
+def health_check():
+    """Health check endpoint"""
+    try:
+        redis_status = "connected" if redis_client.ping() else "disconnected"
+    except:
+        redis_status = "error"
+    
+    return jsonify({
+        "status": "Dermijan Server Running",
+        "version": "Professional Format (Emoji-free)",
+        "endpoints": ["/ask", "/webhook", "/conversation/<user_id>"],
+        "allowed_urls_count": len(ALLOWED_URLS),
+        "redis_status": redis_status,
+        "features": {
+            "emoji_free": True,
+            "professional_formatting": True,
+            "appointment_handling": True,
+            "english_tamil_only": True,
+            "conversation_persistence": True
+        }
+    })
+
+# ────────────────────────────────
+# Main
 # ────────────────────────────────
 if __name__ == "__main__":
-    print("🚀 Dermijan server up ⎯ http://0.0.0.0:8000")
-    app.run(host="0.0.0.0", port=8000, debug=True)
+    print("🚀 Starting Dermijan Server (Professional Format)")
+    print(f"📋 Loaded {len(ALLOWED_URLS)} dermijan.com URLs")
+    print("🔗 Endpoints: /ask, /webhook, /conversation/<user_id>")
+    print("✨ Features: Emoji-free, Auto appointment handling, English+Tamil responses")
+    app.run(debug=True, host='0.0.0.0', port=8000)
