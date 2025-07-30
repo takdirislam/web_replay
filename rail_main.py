@@ -14,7 +14,7 @@ app = Flask(__name__)
 # ---------------------------
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
-PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "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")
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
 WAHA_API_URL = os.getenv("WAHA_API_URL", "http://localhost:3000/api")
 WAHA_SESSION = os.getenv("WAHA_SESSION", "default")
 WAHA_WEBHOOK_TOKEN = os.getenv("WAHA_WEBHOOK_TOKEN", "your-webhook-secret")
@@ -24,15 +24,7 @@ DEBUG_MODE = os.getenv("FLASK_DEBUG", "False").lower() == "true"
 SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.getenv("SERVER_PORT", "8000"))
 
-# Safe logging setup for Railway (logs/ may not work)
-@app.route("/webhook", methods=["POST"])
-def custom_webhook():
-    return jsonify({"msg": "webhook received"}), 200
-
-@app.route("/post", methods=["POST"])
-def post_testing():
-    return jsonify({"msg": "post OK"}), 200
-
+# Logging setup for production (Railway-friendly)
 if not DEBUG_MODE:
     try:
         os.makedirs('logs', exist_ok=True)
@@ -45,11 +37,11 @@ if not DEBUG_MODE:
         app.logger.setLevel(logging.INFO)
         app.logger.info('Dermijan Chatbot startup')
     except Exception as e:
-        # Railway read-only storage: fallback, use stdout logging only
+        # Read-only storage fallback (Railway)
         app.logger.info(f"Logging to logs/ failed: {e}")
 
 # ---------------------------
-# Dermijan URLs
+# Dermijan URLs (shortened for example, use full list in prod)
 # ---------------------------
 ALLOWED_URLS = [
     "https://dermijan.com/",
@@ -123,7 +115,8 @@ ALLOWED_URLS = [
 ]
 
 SYSTEM_PROMPT = """You are a professional support assistant for Dermijan, a skin, hair and body care clinic, chatting with customers on WhatsApp.
-... (পুরো SYSTEM_PROMPT - আগে যেটা ছিল, হুবহু রাখো; এখানে কেটে রাখা হলো দৈর্ঘ্যের জন্য)
+Keep tone friendly, helpful and concise.
+[...Keep your actual long SYSTEM_PROMPT here as before...]
 """
 
 def detect_language(text):
@@ -175,15 +168,15 @@ def remove_emojis_and_icons(text):
         u"\U0001F1E0-\U0001F1FF"
         "]+", flags=re.UNICODE)
     text = emoji_pattern.sub('', text)
-    symbols_to_remove = ['✨', '💆', '💇', '💪', '⏰', '🌟', '💡', '📞', '📅', 
+    symbols_to_remove = ['✨', '💆', '💇', '💪', '⏰', '🌟', '💡', '📞', '📅',
                         '💰', '💯', '🔥', '💫', '👑', '✅', '☑️', '⚠️', '❌']
     for symbol in symbols_to_remove:
         text = text.replace(symbol, '')
     return text.strip()
 
 def detect_appointment_request(text):
-    english_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 
-                       'meet', 'appoint', 'booking', 'reserve', 'arrange']
+    english_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation',
+                        'meet', 'appoint', 'booking', 'reserve', 'arrange']
     tamil_keywords = ['அப்பாயின்ட்மென்ட்', 'புக்', 'சந்திப்பு', 'வருகை', 'நேரம்']
     text_lower = text.lower()
     return (any(keyword in text_lower for keyword in english_keywords) or
@@ -264,7 +257,7 @@ def get_perplexity_answer(question, uid):
     }
     try:
         response = requests.post("https://api.perplexity.ai/chat/completions",
-                               json=payload, headers=headers, timeout=30)
+                             json=payload, headers=headers, timeout=30)
         if response.status_code == 200:
             raw_reply = response.json()["choices"][0]["message"]["content"]
             clean_reply = clean_source_urls(raw_reply)
@@ -312,7 +305,7 @@ def send_waha_text_message(to, message):
     headers = {"Content-Type": "application/json"}
     try:
         response = requests.post(f"{WAHA_API_URL}/sendText",
-                               json=payload, headers=headers, timeout=30)
+                             json=payload, headers=headers, timeout=30)
         success = response.status_code == 200
         if success:
             app.logger.info(f"✅ WAHA text message sent to {to}")
@@ -339,7 +332,7 @@ def send_waha_call_button(to, message):
     headers = {"Content-Type": "application/json"}
     try:
         response = requests.post(f"{WAHA_API_URL}/sendButtons",
-                               json=payload, headers=headers, timeout=30)
+                             json=payload, headers=headers, timeout=30)
         success = response.status_code == 200
         if success:
             app.logger.info(f"✅ WAHA Call Now button sent to {to}")
@@ -408,8 +401,8 @@ def waha_webhook_handler():
         app.logger.info(f"🔄 WAHA webhook received: {payload.get('event', 'unknown')}")
         messages = extract_waha_messages(payload)
         for sender, text in messages:
-            skip_phrases = ["Sources:", "dermijan.com", "isn't available in our approved sources", 
-                           "Call Now:", CALL_NOW_PHONE]
+            skip_phrases = ["Sources:", "dermijan.com", "isn't available in our approved sources",
+                        "Call Now:", CALL_NOW_PHONE]
             if any(phrase.lower() in text.lower() for phrase in skip_phrases):
                 app.logger.info(f"⏭️ Skipped message from {sender}: {text[:30]}...")
                 continue
