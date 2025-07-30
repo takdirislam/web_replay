@@ -25,6 +25,14 @@ SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.getenv("SERVER_PORT", "8000"))
 
 # Safe logging setup for Railway (logs/ may not work)
+@app.route("/webhook", methods=["POST"])
+def custom_webhook():
+    return jsonify({"msg": "webhook received"}), 200
+
+@app.route("/post", methods=["POST"])
+def post_testing():
+    return jsonify({"msg": "post OK"}), 200
+
 if not DEBUG_MODE:
     try:
         os.makedirs('logs', exist_ok=True)
