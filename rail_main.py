@@ -1,13 +1,27 @@
-
+"""
+Dermijan Chatbot - Research-Based UX Optimized Version
+Version: 2025-07-29 UX Enhanced + Railway Deployment Ready
+Features:
+• Research-backed text formatting for maximum readability
+• Optimized paragraph structure for mobile users
+• Strategic use of dots and hyphens for better scanning
+• Visual hierarchy implementation
+• WhatsApp-specific user experience patterns
+• Call to Action Button Implementation
+• panel.whapi.cloud API Integration
+• Asynchronous Processing & Queue Management
+• Performance Optimization
+• Railway Deployment Ready
+"""
 
 from flask import Flask, request, jsonify, render_template_string
 from datetime import datetime
-import requests, json, os, redis, re, asyncio, aiohttp
-import logging, time
+import requests, json, os, redis, re, time
 from threading import Thread
 from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
 import uuid
+import logging
 
 app = Flask(__name__)
 
@@ -25,10 +39,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ────────────────────────────────
-# Redis Configuration
+# Railway Environment Configuration
 # ────────────────────────────────
+PORT = int(os.environ.get("PORT", 8000))
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+
+try:
+    redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+    logger.info("✅ Redis connection successful")
+except Exception as e:
+    logger.error(f"❌ Redis connection failed: {e}")
+    redis_client = None
 
 # ────────────────────────────────
 # API Configuration
@@ -37,7 +58,7 @@ PERPLEXITY_API_KEY = "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"
 
 # panel.whapi.cloud Configuration
 WHAPI_BASE_URL = "https://gate.whapi.cloud"
-WHAPI_TOKEN = os.getenv("WHAPI_TOKEN", "qWfqpscn7vXkC3saOP6k2ZphQRpvCHvG")
+WHAPI_TOKEN = os.getenv("WHAPI_TOKEN", "YOUR_WHAPI_TOKEN_HERE")
 WHAPI_HEADERS = {
     "Authorization": f"Bearer {WHAPI_TOKEN}",
     "Content-Type": "application/json"
@@ -201,7 +222,35 @@ class WhAPIClient:
         self.session = requests.Session()
         self.session.headers.update(self.headers)
     
-
+    def send_message_sync(self, message_data):
+        """Synchronous message sending with status tracking"""
+        try:
+            response = self.session.post(
+                f"{self.base_url}/messages",
+                json=message_data,
+                timeout=RESPONSE_TIMEOUT
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                logger.info(f"Message sent successfully: {result}")
+                
+                # Store message status for tracking
+                message_id = result.get('id')
+                if message_id and redis_client:
+                    redis_client.setex(f"msg_status:{message_id}", 3600, json.dumps(result))
+                
+                return True, result
+            else:
+                logger.error(f"WhAPI error: {response.status_code} - {response.text}")
+                return False, response.text
+                
+        except requests.exceptions.Timeout:
+            logger.error("WhAPI request timeout")
+            return False, "Request timeout"
+        except Exception as e:
+            logger.error(f"WhAPI send error: {e}")
+            return False, str(e)
     
     def get_message_status(self, message_id):
         """Get message delivery status"""
@@ -416,7 +465,7 @@ CONVERSATION RULES:
 
 Language-Specific Contact Information:
 - English: "To book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
-- Tamil: "அப்பாய்ன்ட்மென்ট் புக் செய்ய, தயவுசெய்து எங்களை *+91 9003444435* இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
+- Tamil: "অ্যাপয়েন্টমেন্ট পুক সেইয়া, তয়বুসেইতু এঙ্গলই *+91 9003444435* ইল আলইক্কবুম, এঙ্গল তোতারপু কুলু বিরইবিল উঙ্গলই তোতারপু কোল্লুম।"
 
 Remember: Apply research-backed formatting consistently. Every response should be scannable, mobile-friendly, and follow proven UX patterns."""
 
@@ -445,6 +494,8 @@ class ConversationManager:
 
     def get_history(self, uid):
         try:
+            if not redis_client:
+                return []
             key = f"whatsapp_chat:{uid}"
             msgs = redis_client.lrange(key, 0, -1)
             return [json.loads(m) for m in reversed(msgs)]
@@ -454,6 +505,8 @@ class ConversationManager:
 
     def store(self, uid, msg, who="user"):
         try:
+            if not redis_client:
+                return
             key = f"whatsapp_chat:{uid}"
             data = {"message": msg, "sender": who, "timestamp": datetime.now().isoformat()}
             redis_client.lpush(key, json.dumps(data))
@@ -572,11 +625,11 @@ def get_perplexity_answer(question, uid):
     try:
         # Check cache first for performance optimization
         cache_key = f"answer_cache:{hash(question)}"
-        cached_answer = redis_client.get(cache_key)
-        
-        if cached_answer:
-            logger.info(f"Cache hit for question: {question[:50]}...")
-            return json.loads(cached_answer)
+        if redis_client:
+            cached_answer = redis_client.get(cache_key)
+            if cached_answer:
+                logger.info(f"Cache hit for question: {question[:50]}...")
+                return json.loads(cached_answer)
         
         logger.info(f"Question from {uid}: {question}")
         
@@ -634,7 +687,8 @@ def get_perplexity_answer(question, uid):
             formatted_reply = apply_research_based_formatting(clean_reply, question)
             
             # Cache the response for performance optimization
-            redis_client.setex(cache_key, 3600, json.dumps(formatted_reply))  # 1 hour cache
+            if redis_client:
+                redis_client.setex(cache_key, 3600, json.dumps(formatted_reply))  # 1 hour cache
             
             # Store conversation with research-based formatting
             mgr.store(uid, question, "user")
@@ -653,7 +707,7 @@ def get_perplexity_answer(question, uid):
             
     except Exception as e:
         logger.error(f"Perplexity exception: {e}")
-        if user_language == "tamil":
+        if detect_language(question) == "tamil":
             return "ম্যান্নিক্কবুম, তোলিল্নুত্প সিক্কল এরপট্টু.\n\nপিরকু মুয়র্সিক্কবুম।"
         else:
             return "Sorry, there was a technical issue.\n\nPlease try again."
@@ -733,6 +787,8 @@ def get_conversation(user_id):
 def message_status(message_id):
     """Get message delivery status"""
     try:
+        if not redis_client:
+            return jsonify({"error": "Redis not available"}), 500
         status_data = redis_client.get(f"msg_status:{message_id}")
         if status_data:
             return jsonify(json.loads(status_data))
@@ -748,11 +804,11 @@ def system_stats():
     try:
         stats = {
             "queue_size": message_queue.queue.qsize(),
-            "redis_connected": redis_client.ping(),
+            "redis_connected": redis_client.ping() if redis_client else False,
             "uptime": datetime.now().isoformat(),
-            "processed_messages": redis_client.get("total_processed") or "0",
-            "active_conversations": len(redis_client.keys("whatsapp_chat:*")),
-            "cache_hits": redis_client.get("cache_hits") or "0"
+            "processed_messages": redis_client.get("total_processed") if redis_client else "0",
+            "active_conversations": len(redis_client.keys("whatsapp_chat:*")) if redis_client else 0,
+            "cache_hits": redis_client.get("cache_hits") if redis_client else "0"
         }
         return jsonify(stats)
     except Exception as e:
@@ -828,17 +884,18 @@ def call_button_demo():
 def health_check():
     """Health check with UX feature status"""
     try:
-        redis_status = "connected" if redis_client.ping() else "disconnected"
+        redis_status = "connected" if (redis_client and redis_client.ping()) else "disconnected"
     except:
         redis_status = "error"
     
     return jsonify({
         "status": "Dermijan Server Running - Enhanced with Call Buttons & WhAPI",
-        "version": "Research-Based UX + Performance Optimized",
+        "version": "Research-Based UX + Performance Optimized + Railway Ready",
         "endpoints": ["/ask", "/webhook", "/conversation/<user_id>", "/status/<id>", "/stats", "/demo"],
         "allowed_urls_count": len(ALLOWED_URLS),
         "redis_status": redis_status,
         "queue_size": message_queue.queue.qsize(),
+        "port": PORT,
         "features": {
             "research_based_formatting": True,
             "mobile_optimized_paragraphs": True,
@@ -855,18 +912,21 @@ def health_check():
             "performance_optimized": True,
             "message_status_tracking": True,
             "response_caching": True,
-            "comprehensive_logging": True
+            "comprehensive_logging": True,
+            "railway_deployment_ready": True
         }
     })
 
 # ────────────────────────────────
-# Main
+# Main - Railway Configuration
 # ────────────────────────────────
 if __name__ == "__main__":
-    logger.info("🚀 Starting Dermijan Server - Enhanced with Call Buttons & WhAPI Integration")
+    logger.info("🚄 Starting Dermijan Server - Railway Deployment Ready")
     logger.info(f"📋 Loaded {len(ALLOWED_URLS)} dermijan.com URLs")
     logger.info("🎯 Features: Research-based formatting, Mobile-optimized, Visual hierarchy")
     logger.info("✨ New Features: Call buttons, panel.whapi.cloud API, Async processing")
     logger.info("📱 Mobile-first readability, Language-specific responses, Performance optimized")
     logger.info("🔧 Queue management, Message status tracking, Comprehensive logging")
-    app.run(debug=True, host='0.0.0.0', port=8000)
+    logger.info(f"🌐 Server starting on port: {PORT}")
+    
+    app.run(debug=False, host='0.0.0.0', port=PORT)
