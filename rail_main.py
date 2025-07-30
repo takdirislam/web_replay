@@ -37,7 +37,7 @@ PERPLEXITY_API_KEY = "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"
 
 # panel.whapi.cloud Configuration
 WHAPI_BASE_URL = "https://gate.whapi.cloud"
-WHAPI_TOKEN = os.getenv("WHAPI_TOKEN", "YOUR_WHAPI_TOKEN_HERE")
+WHAPI_TOKEN = os.getenv("WHAPI_TOKEN", "qWfqpscn7vXkC3saOP6k2ZphQRpvCHvG")
 WHAPI_HEADERS = {
     "Authorization": f"Bearer {WHAPI_TOKEN}",
     "Content-Type": "application/json"
