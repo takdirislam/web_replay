@@ -23,6 +23,11 @@ CALL_NOW_LABEL = "📞 Call Now"
 DEBUG_MODE = os.getenv("FLASK_DEBUG", "False").lower() == "true"
 SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
 SERVER_PORT = int(os.getenv("SERVER_PORT", "8000"))
+@app.route("/webhook", methods=["POST"])
+def generic_webhook():
+    data = request.get_json()
+    # প্রাসঙ্গিক প্রসেসিং
+    return jsonify({"status": "received"})
 
 # Logging setup for production (Railway-friendly)
 if not DEBUG_MODE:
