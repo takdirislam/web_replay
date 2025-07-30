@@ -201,35 +201,7 @@ class WhAPIClient:
         self.session = requests.Session()
         self.session.headers.update(self.headers)
     
-    def send_message_sync(self, message_data):
-        """Synchronous message sending with status tracking"""
-        try:
-            response = self.session.post(
-                f"{self.base_url}/messages",
-                json=message_data,
-                timeout=RESPONSE_TIMEOUT
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                logger.info(f"Message sent successfully: {result}")
-                
-                # Store message status for tracking
-                message_id = result.get('id')
-                if message_id:
-                    redis_client.setex(f"msg_status:{message_id}", 3600, json.dumps(result))
-                
-                return True, result
-            else:
-                logger.error(f"WhAPI error: {response.status_code} - {response.text}")
-                return False, response.text
-                
-        except requests.exceptions.Timeout:
-            logger.error("WhAPI request timeout")
-            return False, "Request timeout"
-        except Exception as e:
-            logger.error(f"WhAPI send error: {e}")
-            return False, str(e)
+
     
     def get_message_status(self, message_id):
         """Get message delivery status"""
