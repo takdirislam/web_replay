@@ -1,8 +1,8 @@
 """
 Dermijan Chatbot - Research-Based UX Optimized Version
-Version: 2025-07-31 WAHA + Concurrent Processing
+Version: 2025-07-31 WAHA + Concurrent Processing + Docker Support
 Features:
-• WAHA API Integration
+• WAHA API Integration with Docker
 • Concurrent message processing
 • Research-backed text formatting for maximum readability
 • Optimized paragraph structure for mobile users
@@ -19,22 +19,89 @@ import threading
 from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
+import subprocess
+import time
 
 app = Flask(__name__)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 # ────────────────────────────────
-# WAHA API Configuration
+# Docker WAHA Setup
 # ────────────────────────────────
-WAHA_API_URL = "http://localhost:3000/dashboard"  # Your WAHA server URL
-WAHA_API_KEY = "admin"  # WAHA API key
-WAHA_SESSION_NAME = "WAHA"  # Session name
+def setup_waha_docker():
+    """Setup WAHA using Docker"""
+    try:
+        print("🐳 Setting up WAHA Docker container...")
+        
+        # Check if WAHA container already exists
+        result = subprocess.run(['docker', 'ps', '-a'], capture_output=True, text=True)
+        if 'waha' in result.stdout:
+            print("📦 WAHA container already exists, starting it...")
+            subprocess.run(['docker', 'start', 'waha'], check=True)
+        else:
+            print("📥 Pulling WAHA Docker image...")
+            subprocess.run(['docker', 'pull', 'devlikeapro/waha'], check=True)
+            
+            print("🚀 Starting WAHA container...")
+            subprocess.run([
+                'docker', 'run', '-d',
+                '--name', 'waha',
+                '-p', '3000:3000',
+                '-e', 'WAHA_API_KEY=admin',
+                'devlikeapro/waha'
+            ], check=True)
+        
+        # Wait for WAHA to start
+        print("⏳ Waiting for WAHA to start...")
+        for i in range(30):  # Wait up to 30 seconds
+            try:
+                response = requests.get("http://localhost:3000/health", timeout=2)
+                if response.status_code == 200:
+                    print("✅ WAHA is running successfully!")
+                    print(f"🌐 Dashboard: http://localhost:3000/dashboard")
+                    print(f"📚 API Docs: http://localhost:3000/")
+                    return True
+            except:
+                time.sleep(1)
+        
+        print("❌ WAHA failed to start properly")
+        return False
+        
+    except subprocess.CalledProcessError as e:
+        print(f"🚨 Docker command failed: {e}")
+        return False
+    except Exception as e:
+        print(f"🚨 Error setting up WAHA: {e}")
+        return False
 
-# WAHA API Headers
+def check_docker_status():
+    """Check if Docker is installed and running"""
+    try:
+        result = subprocess.run(['docker', '--version'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"✅ Docker found: {result.stdout.strip()}")
+            return True
+        else:
+            print("❌ Docker not found")
+            return False
+    except FileNotFoundError:
+        print("❌ Docker not installed")
+        return False
+
+# ────────────────────────────────
+# WAHA API Configuration (Fixed)
+# ────────────────────────────────
+WAHA_BASE_URL = os.getenv("WAHA_BASE_URL", "http://localhost:3000")
+WAHA_API_URL = f"{WAHA_BASE_URL}/api"  # Fixed: API endpoint, not dashboard
+WAHA_DASHBOARD_URL = f"{WAHA_BASE_URL}/dashboard"
+WAHA_API_KEY = os.getenv("WAHA_API_KEY", "admin")
+WAHA_SESSION_NAME = os.getenv("WAHA_SESSION_NAME", "DERMIJAN_BOT")
+
+# WAHA API Headers (Fixed)
 WAHA_HEADERS = {
     "Content-Type": "application/json",
-    "Authorization": f"Bearer {WAHA_API_KEY}" if WAHA_API_KEY else {}
+    "X-Api-Key": WAHA_API_KEY  # Fixed: WAHA uses X-Api-Key, not Bearer
 }
 
 # ────────────────────────────────
@@ -269,7 +336,7 @@ def detect_appointment_request(text):
     """Enhanced appointment detection based on user behavior research"""
     english_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 
                        'meet', 'appoint', 'booking', 'reserve', 'arrange']
-    tamil_keywords = ['அப்பாய்ன்ட்மென்ட்', 'புக்', 'சந்திப்பு', 'வருகை', 'நேரம்']
+    tamil_keywords = ['அப்பாய்ன்ட்மென்ட்', 'புக்', 'சந்திப்பு', 'வருகை', 'நেরம்']
     
     text_lower = text.lower()
     return (any(keyword in text_lower for keyword in english_keywords) or
@@ -308,7 +375,7 @@ def apply_research_based_formatting(text, user_question):
     # Add appointment info based on UX research on call-to-action placement
     if detect_appointment_request(user_question):
         if user_language == "tamil":
-            appointment_text = "\n\nஅப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
+            appointment_text = "\n\nஅப்பாய்ன்ட்மென்ট் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விরைவில் உங்களை தொடর்பு কொள்ளும்।"
         else:
             appointment_text = "\n\nTo book an appointment, please call us at +91 9003444435 and our contact team will get in touch with you shortly."
         
@@ -363,7 +430,7 @@ def get_perplexity_answer_optimized(question, uid):
     # Shorter, more focused prompt for faster processing
     if user_language == "tamil":
         language_instruction = "Tamil-এ সংক্ষিপ্ত উত্তর দিন। সর্বোচ্চ ৩ লাইন।"
-        not_found_msg = "அந்த தகவல் எங்கள் அங்கீகரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை। துல்லியமான விவரங்களுக்கு எங்கள் ஆதரவு குழுவை தொடர்பு கொள்ளவும்।"
+        not_found_msg = "அந்த தகவல் எங்கள் அங்கீকரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில্லை। துல্লியமான विवরங்களுক্কু எங்கள் ஆதरवு குழুವை தொডர்পু கொল்লवুम্।"
     else:
         language_instruction = "Reply in English. Maximum 3 lines."
         not_found_msg = "That information isn't available in our approved sources. Please contact our support team for accurate details."
@@ -423,7 +490,7 @@ def get_perplexity_answer_optimized(question, uid):
         return not_found_msg
 
 # ────────────────────────────────
-# WAHA API Functions
+# WAHA API Functions (Fixed)
 # ────────────────────────────────
 def extract_waha_messages(payload):
     """Extract messages from WAHA webhook payload"""
@@ -461,7 +528,7 @@ def send_waha_reply(to_phone, message):
     
     try:
         response = requests.post(
-            f"{WAHA_API_URL}/sendText", 
+            f"{WAHA_API_URL}/sendText",  # Fixed: using API URL
             json=payload, 
             headers=WAHA_HEADERS,
             timeout=10
@@ -512,6 +579,48 @@ def message_worker():
                 
         except Exception as e:
             print(f"Worker error: {e}")
+
+# ────────────────────────────────
+# Docker Management Routes
+# ────────────────────────────────
+@app.route("/setup-waha", methods=["POST"])
+def setup_waha():
+    """Setup WAHA Docker container"""
+    if setup_waha_docker():
+        return jsonify({
+            "success": True,
+            "message": "WAHA setup completed successfully",
+            "dashboard_url": WAHA_DASHBOARD_URL,
+            "api_url": WAHA_API_URL
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "message": "WAHA setup failed"
+        }), 500
+
+@app.route("/waha-status", methods=["GET"])
+def waha_status():
+    """Check WAHA status"""
+    try:
+        response = requests.get(f"{WAHA_BASE_URL}/health", timeout=5)
+        if response.status_code == 200:
+            return jsonify({
+                "status": "running",
+                "dashboard_url": WAHA_DASHBOARD_URL,
+                "api_url": WAHA_API_URL,
+                "message": "WAHA is running successfully"
+            })
+        else:
+            return jsonify({
+                "status": "error",
+                "message": "WAHA is not responding properly"
+            })
+    except:
+        return jsonify({
+            "status": "offline",
+            "message": "WAHA is not running"
+        })
 
 # Start background worker thread
 worker_thread = threading.Thread(target=message_worker, daemon=True)
@@ -576,15 +685,26 @@ def health_check():
     except:
         redis_status = "error"
     
+    # Check WAHA status
+    try:
+        waha_response = requests.get(f"{WAHA_BASE_URL}/health", timeout=2)
+        waha_status = "running" if waha_response.status_code == 200 else "offline"
+    except:
+        waha_status = "offline"
+    
     return jsonify({
-        "status": "Dermijan Server Running - WAHA + Concurrent Processing",
+        "status": "Dermijan Server Running - WAHA + Docker + Concurrent Processing",
         "version": "Research-Based User Experience Enhanced",
-        "endpoints": ["/ask", "/webhook", "/conversation/<user_id>"],
+        "endpoints": ["/ask", "/webhook", "/conversation/<user_id>", "/setup-waha", "/waha-status"],
         "allowed_urls_count": len(ALLOWED_URLS),
         "redis_status": redis_status,
+        "waha_status": waha_status,
+        "waha_dashboard": WAHA_DASHBOARD_URL,
+        "waha_api": WAHA_API_URL,
         "supported_languages": ["English", "Tamil"],
         "conversation_history_limit": 7,
         "ux_features": {
+            "docker_integration": True,
             "waha_api_integration": True,
             "concurrent_processing": True,
             "research_based_formatting": True,
@@ -604,9 +724,25 @@ def health_check():
 # Main
 # ────────────────────────────────
 if __name__ == "__main__":
-    print("🚀 Starting Dermijan Server - WAHA + Concurrent Processing")
+    print("🚀 Starting Dermijan Server - WAHA + Docker + Concurrent Processing")
     print(f"📋 Loaded {len(ALLOWED_URLS)} dermijan.com URLs")
-    print("⚡ Features: WAHA API, Concurrent processing, Speed optimized")
+    
+    # Check Docker status
+    if check_docker_status():
+        print("🐳 Docker is available")
+        
+        # Auto-setup WAHA if requested
+        if os.getenv("AUTO_SETUP_WAHA", "true").lower() == "true":
+            print("🔄 Auto-setting up WAHA...")
+            if setup_waha_docker():
+                print(f"✅ WAHA Dashboard: {WAHA_DASHBOARD_URL}")
+                print(f"✅ WAHA API: {WAHA_API_URL}")
+            else:
+                print("❌ WAHA auto-setup failed")
+    else:
+        print("❌ Docker not available - WAHA will need manual setup")
+    
+    print("⚡ Features: WAHA API, Docker, Concurrent processing, Speed optimized")
     print("🌐 Supported Languages: English and Tamil only")
     print("💬 Conversation History: Last 7 messages")
     print("🔄 Background workers: Started")
