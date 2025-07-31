@@ -1,119 +1,29 @@
 """
 Dermijan Chatbot - Research-Based UX Optimized Version
-Version: 2025-07-31 WAHA + Concurrent Processing + Docker Support
+Version: 2025-07-29 UX Enhanced
 Features:
-• WAHA API Integration with Docker
-• Concurrent message processing
 • Research-backed text formatting for maximum readability
 • Optimized paragraph structure for mobile users
 • Strategic use of dots and hyphens for better scanning
 • Visual hierarchy implementation
 • WhatsApp-specific user experience patterns
-• English and Tamil language support only
 """
 
 from flask import Flask, request, jsonify
 from datetime import datetime
 import requests, json, os, redis, re
-import threading
-from queue import Queue
-from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
-import subprocess
-import time
 
 app = Flask(__name__)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 # ────────────────────────────────
-# Docker WAHA Setup
-# ────────────────────────────────
-def setup_waha_docker():
-    """Setup WAHA using Docker"""
-    try:
-        print("🐳 Setting up WAHA Docker container...")
-        
-        # Check if WAHA container already exists
-        result = subprocess.run(['docker', 'ps', '-a'], capture_output=True, text=True)
-        if 'waha' in result.stdout:
-            print("📦 WAHA container already exists, starting it...")
-            subprocess.run(['docker', 'start', 'waha'], check=True)
-        else:
-            print("📥 Pulling WAHA Docker image...")
-            subprocess.run(['docker', 'pull', 'devlikeapro/waha'], check=True)
-            
-            print("🚀 Starting WAHA container...")
-            subprocess.run([
-                'docker', 'run', '-d',
-                '--name', 'waha',
-                '-p', '3000:3000',
-                '-e', 'WAHA_API_KEY=admin',
-                'devlikeapro/waha'
-            ], check=True)
-        
-        # Wait for WAHA to start
-        print("⏳ Waiting for WAHA to start...")
-        for i in range(30):  # Wait up to 30 seconds
-            try:
-                response = requests.get("http://localhost:3000/health", timeout=2)
-                if response.status_code == 200:
-                    print("✅ WAHA is running successfully!")
-                    print(f"🌐 Dashboard: http://localhost:3000/dashboard")
-                    print(f"📚 API Docs: http://localhost:3000/")
-                    return True
-            except:
-                time.sleep(1)
-        
-        print("❌ WAHA failed to start properly")
-        return False
-        
-    except subprocess.CalledProcessError as e:
-        print(f"🚨 Docker command failed: {e}")
-        return False
-    except Exception as e:
-        print(f"🚨 Error setting up WAHA: {e}")
-        return False
-
-def check_docker_status():
-    """Check if Docker is installed and running"""
-    try:
-        result = subprocess.run(['docker', '--version'], capture_output=True, text=True)
-        if result.returncode == 0:
-            print(f"✅ Docker found: {result.stdout.strip()}")
-            return True
-        else:
-            print("❌ Docker not found")
-            return False
-    except FileNotFoundError:
-        print("❌ Docker not installed")
-        return False
-
-# ────────────────────────────────
-# WAHA API Configuration (Fixed)
-# ────────────────────────────────
-WAHA_BASE_URL = os.getenv("WAHA_BASE_URL", "http://localhost:3000")
-WAHA_API_URL = f"{WAHA_BASE_URL}/api"  # Fixed: API endpoint, not dashboard
-WAHA_DASHBOARD_URL = f"{WAHA_BASE_URL}/dashboard"
-WAHA_API_KEY = os.getenv("WAHA_API_KEY", "admin")
-WAHA_SESSION_NAME = os.getenv("WAHA_SESSION_NAME", "DERMIJAN_BOT")
-
-# WAHA API Headers (Fixed)
-WAHA_HEADERS = {
-    "Content-Type": "application/json",
-    "X-Api-Key": WAHA_API_KEY  # Fixed: WAHA uses X-Api-Key, not Bearer
-}
-
-# ────────────────────────────────
-# Perplexity API Configuration
+# API Configuration
 # ────────────────────────────────
 PERPLEXITY_API_KEY = "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"
-
-# ────────────────────────────────
-# Concurrent Processing Setup
-# ────────────────────────────────
-message_queue = Queue()
-executor = ThreadPoolExecutor(max_workers=10)  # 10 concurrent workers
+WASENDER_API_TOKEN = "f09e71da244b2723818594f08ed45780cd6031172d1596b26f070513b6c39a56"
+WASENDER_SESSION = "RITONNO"
+WASENDER_API_URL = "https://wasenderapi.com/api/send-message"
 
 # ────────────────────────────────
 # Dermijan URLs (unchanged)
@@ -336,7 +246,7 @@ def detect_appointment_request(text):
     """Enhanced appointment detection based on user behavior research"""
     english_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 
                        'meet', 'appoint', 'booking', 'reserve', 'arrange']
-    tamil_keywords = ['அப்பாய்ன்ட்மென்ட்', 'புக்', 'சந்திப்பு', 'வருகை', 'நেরம்']
+    tamil_keywords = ['அப்பாய்ன்ட்மென்ট்', 'புக்', 'சந்திப்பு', 'வருகை', 'நேரம்']
     
     text_lower = text.lower()
     return (any(keyword in text_lower for keyword in english_keywords) or
@@ -375,7 +285,7 @@ def apply_research_based_formatting(text, user_question):
     # Add appointment info based on UX research on call-to-action placement
     if detect_appointment_request(user_question):
         if user_language == "tamil":
-            appointment_text = "\n\nஅப்பாய்ன்ட்மென்ট் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விরைவில் உங்களை தொடর்பு কொள்ளும்।"
+            appointment_text = "\n\nஅப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
         else:
             appointment_text = "\n\nTo book an appointment, please call us at +91 9003444435 and our contact team will get in touch with you shortly."
         
@@ -400,47 +310,40 @@ def clean_source_urls(text):
     return re.sub(r'\n\s*\n', '\n', text).strip()
 
 # ────────────────────────────────
-# Response Speed Optimization
+# Enhanced Perplexity API Integration
 # ────────────────────────────────
-
-# Cache for frequent responses
-@lru_cache(maxsize=100)
-def get_cached_response(question_hash):
-    """Cache frequent responses to improve speed"""
-    return None
-
-def get_perplexity_answer_optimized(question, uid):
-    """Optimized Perplexity API call with caching and timeout"""
-    print(f"Processing question from {uid}: {question}")
+def get_perplexity_answer(question, uid):
+    """Get UX-optimized answer from Perplexity API"""
+    print(f"Question from {uid}: {question}")
     
-    # Check cache first
-    question_hash = hash(question.lower().strip())
-    cached = get_cached_response(question_hash)
-    if cached:
-        print(f"Using cached response for {uid}")
-        return cached
-    
-    # Language detection
+    # Language detection for appropriate response
     user_language = detect_language(question)
+    print(f"Detected language: {user_language}")
     
-    # Optimized conversation history (limit to last 7 messages)
-    hist = mgr.get_history(uid)[-7:]  # Only last 7 messages
+    hist = mgr.get_history(uid)
     ctx = mgr.format_context(hist)
     
-    # Shorter, more focused prompt for faster processing
+    # Research-based language instructions
     if user_language == "tamil":
-        language_instruction = "Tamil-এ সংক্ষিপ্ত উত্তর দিন। সর্বোচ্চ ৩ লাইন।"
-        not_found_msg = "அந்த தகவல் எங்கள் அங்கீকரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில্லை। துல্লியமான विवরங்களுক্কু எங்கள் ஆதरवு குழুವை தொডர்পু கொল்লवুम্।"
+        language_instruction = "Respond ONLY in Tamil. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
+        not_found_msg = "அந்த தகவல் எங்கள் அங்கீকரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை. துல்லியமான விவரங்களுக்கு எங்கள் ஆதரவு குழுவை தொடர்பு கொள்ளவும்."
     else:
-        language_instruction = "Reply in English. Maximum 3 lines."
+        language_instruction = "Respond ONLY in English. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
         not_found_msg = "That information isn't available in our approved sources. Please contact our support team for accurate details."
     
-    # Optimized prompt - shorter for faster processing
     user_prompt = (
-        f"Answer briefly using dermijan.com info:\n"
-        f"{ctx}User: {question}\n\n"
-        f"{language_instruction} "
-        f"If not found: '{not_found_msg}'"
+        f"Answer using ONLY information from these dermijan.com pages:\n"
+        + "\n".join(ALLOWED_URLS) + "\n\n"
+        + ctx + f"User: {question}\n\n"
+        f"Instructions: {language_instruction} "
+        f"Follow UX research guidelines: "
+        f"1) Maximum 4-6 lines total response "
+        f"2) Start with greeting + context "
+        f"3) Use bullet points for multiple benefits "
+        f"4) Single asterisk (*) for bold formatting only "
+        f"5) End with clear next step "
+        f"If answer not found, reply: '{not_found_msg}' "
+        f"Do NOT include source URLs. Focus on scannability and mobile readability."
     )
 
     payload = {
@@ -449,7 +352,7 @@ def get_perplexity_answer_optimized(question, uid):
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt}
         ],
-        "max_tokens": 500,  # Reduced from 1000
+        "max_tokens": 1000,
         "temperature": 0.1
     }
 
@@ -459,172 +362,84 @@ def get_perplexity_answer_optimized(question, uid):
     }
 
     try:
-        # Reduced timeout for faster failure handling
-        response = requests.post(
-            "https://api.perplexity.ai/chat/completions", 
-            json=payload, 
-            headers=headers, 
-            timeout=15  # Reduced from 30
-        )
+        response = requests.post("https://api.perplexity.ai/chat/completions", 
+                               json=payload, headers=headers, timeout=30)
         
         if response.status_code == 200:
             raw_reply = response.json()["choices"][0]["message"]["content"]
             clean_reply = clean_source_urls(raw_reply)
             formatted_reply = apply_research_based_formatting(clean_reply, question)
             
-            # Cache the response
-            get_cached_response.__wrapped__.cache_info()
-            
-            # Store conversation
+            # Store conversation with research-based formatting
             mgr.store(uid, question, "user")
             mgr.store(uid, formatted_reply, "bot")
             
             return formatted_reply
-            
         else:
-            print(f"Perplexity API error: {response.status_code}")
-            return not_found_msg
+            print(f"Perplexity API error: {response.status_code} - {response.text}")
+            if user_language == "tamil":
+                return "மன்னிக்கவும், எங்கள் சேவை தற்காலிகமாக கிடைக்கவில்லை.\n\nபிறகு முயற்சிக்கவும்."
+            else:
+                return "Sorry, our service is temporarily unavailable.\n\nPlease try again later."
             
     except Exception as e:
         print(f"Perplexity exception: {e}")
-        return not_found_msg
+        if user_language == "tamil":
+            return "மன்னிக்கவும், தொழில்நுட்ப சிக்கல் ஏற்பட்டது.\n\nபிறகு முயற்சிக்கவும்."
+        else:
+            return "Sorry, there was a technical issue.\n\nPlease try again."
 
 # ────────────────────────────────
-# WAHA API Functions (Fixed)
+# WASender Functions (unchanged)
 # ────────────────────────────────
-def extract_waha_messages(payload):
-    """Extract messages from WAHA webhook payload"""
+def extract_wasender_messages(payload):
+    """Extract messages from WASender webhook"""
     messages = []
     try:
-        # WAHA webhook structure
-        if payload.get("event") == "message":
-            data = payload.get("payload", {})
+        if payload.get("event") == "messages.upsert":
+            data = payload.get("data", {}).get("messages", {})
+            sender = data.get("key", {}).get("remoteJid", "").replace("@s.whatsapp.net", "").replace("+", "")
             
-            # Extract sender and message text
-            sender = data.get("from", "").replace("@c.us", "")
+            message_content = data.get("message", {})
+            text = ""
+            if "conversation" in message_content:
+                text = message_content["conversation"]
+            elif "extendedTextMessage" in message_content:
+                text = message_content["extendedTextMessage"].get("text", "")
             
-            # Handle different message types
-            message_text = ""
-            if data.get("body"):
-                message_text = data.get("body")
-            elif data.get("text"):
-                message_text = data.get("text")
-            
-            if sender and message_text:
-                messages.append((sender, message_text))
+            if sender and text:
+                messages.append((sender, text))
                 
     except Exception as e:
-        print(f"WAHA message extraction error: {e}")
+        print(f"Message extraction error: {e}")
     
     return messages
 
-def send_waha_reply(to_phone, message):
-    """Send reply via WAHA API"""
+def send_wasender_reply(to_phone, message):
+    """Send UX-optimized reply via WASender API"""
+    if not WASENDER_API_TOKEN:
+        print("WASender API token missing")
+        return False
+    
     payload = {
-        "session": WAHA_SESSION_NAME,
-        "chatId": f"{to_phone}@c.us",
+        "session": WASENDER_SESSION,
+        "to": to_phone,
         "text": message
     }
     
+    headers = {
+        "Authorization": f"Bearer {WASENDER_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    
     try:
-        response = requests.post(
-            f"{WAHA_API_URL}/sendText",  # Fixed: using API URL
-            json=payload, 
-            headers=WAHA_HEADERS,
-            timeout=10
-        )
-        
+        response = requests.post(WASENDER_API_URL, json=payload, headers=headers)
         success = response.status_code in [200, 201]
-        if success:
-            print(f"Message sent successfully to {to_phone}")
-        else:
-            print(f"WAHA send error: {response.status_code} - {response.text}")
-        
+        print("Message sent successfully" if success else f"Send error: {response.status_code}")
         return success
-        
     except Exception as e:
-        print(f"WAHA send exception: {e}")
+        print(f"Send error: {e}")
         return False
-
-# ────────────────────────────────
-# Concurrent Processing Functions
-# ────────────────────────────────
-def process_message_async(sender, text):
-    """Process single message asynchronously"""
-    try:
-        print(f"Processing message from {sender}: {text}")
-        
-        # Get AI response
-        answer = get_perplexity_answer_optimized(text, sender)
-        
-        # Send reply
-        send_waha_reply(sender, answer)
-        
-    except Exception as e:
-        print(f"Async processing error for {sender}: {e}")
-
-def message_worker():
-    """Background worker to process message queue"""
-    while True:
-        try:
-            if not message_queue.empty():
-                sender, text = message_queue.get()
-                
-                # Submit to thread pool for concurrent processing
-                executor.submit(process_message_async, sender, text)
-                
-                message_queue.task_done()
-            else:
-                threading.Event().wait(0.1)  # Small delay when queue is empty
-                
-        except Exception as e:
-            print(f"Worker error: {e}")
-
-# ────────────────────────────────
-# Docker Management Routes
-# ────────────────────────────────
-@app.route("/setup-waha", methods=["POST"])
-def setup_waha():
-    """Setup WAHA Docker container"""
-    if setup_waha_docker():
-        return jsonify({
-            "success": True,
-            "message": "WAHA setup completed successfully",
-            "dashboard_url": WAHA_DASHBOARD_URL,
-            "api_url": WAHA_API_URL
-        })
-    else:
-        return jsonify({
-            "success": False,
-            "message": "WAHA setup failed"
-        }), 500
-
-@app.route("/waha-status", methods=["GET"])
-def waha_status():
-    """Check WAHA status"""
-    try:
-        response = requests.get(f"{WAHA_BASE_URL}/health", timeout=5)
-        if response.status_code == 200:
-            return jsonify({
-                "status": "running",
-                "dashboard_url": WAHA_DASHBOARD_URL,
-                "api_url": WAHA_API_URL,
-                "message": "WAHA is running successfully"
-            })
-        else:
-            return jsonify({
-                "status": "error",
-                "message": "WAHA is not responding properly"
-            })
-    except:
-        return jsonify({
-            "status": "offline",
-            "message": "WAHA is not running"
-        })
-
-# Start background worker thread
-worker_thread = threading.Thread(target=message_worker, daemon=True)
-worker_thread.start()
 
 # ────────────────────────────────
 # Flask Routes
@@ -639,37 +454,30 @@ def ask_question():
     if not question:
         return jsonify({"reply": "Please provide a question."}), 400
     
-    answer = get_perplexity_answer_optimized(question, user_id)
+    answer = get_perplexity_answer(question, user_id)
     return jsonify({"reply": answer})
 
 @app.route("/webhook", methods=["POST"])
 def webhook_handler():
-    """Optimized webhook handler for concurrent processing"""
+    """WhatsApp webhook handler with UX optimization"""
     try:
         payload = request.get_json()
+        messages = extract_wasender_messages(payload)
         
-        # Quick response to avoid timeout
-        response = jsonify({"status": "received"})
-        
-        # Extract messages using WAHA format
-        messages = extract_waha_messages(payload)
-        
-        # Add messages to queue for async processing
         for sender, text in messages:
             # Skip bot messages to prevent loops
             skip_phrases = ["Sources:", "dermijan.com", "isn't available in our approved sources"]
             if any(phrase.lower() in text.lower() for phrase in skip_phrases):
                 continue
             
-            # Add to queue instead of processing immediately
-            message_queue.put((sender, text))
-            print(f"Message queued from {sender}")
+            answer = get_perplexity_answer(text, sender)
+            send_wasender_reply(sender, answer)
         
-        return response
+        return jsonify({"status": "success"})
         
     except Exception as e:
         print(f"Webhook error: {e}")
-        return jsonify({"status": "error"}), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/conversation/<user_id>", methods=["GET"])
 def get_conversation(user_id):
@@ -685,28 +493,13 @@ def health_check():
     except:
         redis_status = "error"
     
-    # Check WAHA status
-    try:
-        waha_response = requests.get(f"{WAHA_BASE_URL}/health", timeout=2)
-        waha_status = "running" if waha_response.status_code == 200 else "offline"
-    except:
-        waha_status = "offline"
-    
     return jsonify({
-        "status": "Dermijan Server Running - WAHA + Docker + Concurrent Processing",
+        "status": "Dermijan Server Running - UX Optimized",
         "version": "Research-Based User Experience Enhanced",
-        "endpoints": ["/ask", "/webhook", "/conversation/<user_id>", "/setup-waha", "/waha-status"],
+        "endpoints": ["/ask", "/webhook", "/conversation/<user_id>"],
         "allowed_urls_count": len(ALLOWED_URLS),
         "redis_status": redis_status,
-        "waha_status": waha_status,
-        "waha_dashboard": WAHA_DASHBOARD_URL,
-        "waha_api": WAHA_API_URL,
-        "supported_languages": ["English", "Tamil"],
-        "conversation_history_limit": 7,
         "ux_features": {
-            "docker_integration": True,
-            "waha_api_integration": True,
-            "concurrent_processing": True,
             "research_based_formatting": True,
             "mobile_optimized_paragraphs": True,
             "language_specific_responses": True,
@@ -714,9 +507,7 @@ def health_check():
             "visual_hierarchy_implemented": True,
             "accessibility_compliant": True,
             "whatsapp_pattern_optimized": True,
-            "scanning_friendly_layout": True,
-            "response_caching": True,
-            "speed_optimized": True
+            "scanning_friendly_layout": True
         }
     })
 
@@ -724,34 +515,9 @@ def health_check():
 # Main
 # ────────────────────────────────
 if __name__ == "__main__":
-    print("🚀 Starting Dermijan Server - WAHA + Docker + Concurrent Processing")
+    print("🚀 Starting Dermijan Server - UX Research Enhanced")
     print(f"📋 Loaded {len(ALLOWED_URLS)} dermijan.com URLs")
-    
-    # Check Docker status
-    if check_docker_status():
-        print("🐳 Docker is available")
-        
-        # Auto-setup WAHA if requested
-        if os.getenv("AUTO_SETUP_WAHA", "true").lower() == "true":
-            print("🔄 Auto-setting up WAHA...")
-            if setup_waha_docker():
-                print(f"✅ WAHA Dashboard: {WAHA_DASHBOARD_URL}")
-                print(f"✅ WAHA API: {WAHA_API_URL}")
-            else:
-                print("❌ WAHA auto-setup failed")
-    else:
-        print("❌ Docker not available - WAHA will need manual setup")
-    
-    print("⚡ Features: WAHA API, Docker, Concurrent processing, Speed optimized")
-    print("🌐 Supported Languages: English and Tamil only")
-    print("💬 Conversation History: Last 7 messages")
-    print("🔄 Background workers: Started")
-    print("📱 Mobile-optimized responses ready")
-    
-    # Start Flask with threaded support
-    app.run(
-        debug=False,  # Disable debug in production for better performance
-        host='0.0.0.0', 
-        port=8000,
-        threaded=True  # Enable threading support
-    )
+    print("🎯 Features: Research-based formatting, Mobile-optimized, Visual hierarchy")
+    print("✨ UX Enhancements: Short paragraphs, Strategic dots/hyphens, Scannable layout")
+    print("📱 Mobile-first readability, Language-specific responses, Accessibility compliant")
+    app.run(debug=True, host='0.0.0.0', port=8000)
