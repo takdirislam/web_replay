@@ -1,14 +1,4 @@
-"""
-Dermijan Chatbot - Research-Based UX Optimized Version
-Version: 2025-07-29 UX Enhanced with WAHA Integration
-Features:
-• Research-backed text formatting for maximum readability
-• Optimized paragraph structure for mobile users
-• Strategic use of dots and hyphens for better scanning
-• Visual hierarchy implementation
-• WhatsApp-specific user experience patterns
-• WAHA API Integration
-"""
+
 
 from flask import Flask, request, jsonify
 from datetime import datetime
@@ -25,7 +15,7 @@ PERPLEXITY_API_KEY = "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"
 
 # WAHA API Configuration (WASender এর পরিবর্তে)
 WAHA_API_URL = "http://localhost:3000"  # আপনার WAHA সার্ভার URL
-WAHA_SESSION = "RITONNO"  # আপনার session নাম
+WAHA_SESSION = "WAHA"  # আপনার session নাম
 
 # ────────────────────────────────
 # Dermijan URLs (unchanged)
