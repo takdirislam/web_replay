@@ -1,5 +1,3 @@
-
-
 from flask import Flask, request, jsonify
 from datetime import datetime
 import requests, json, os, redis, re
@@ -9,13 +7,11 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 # ────────────────────────────────
-# API Configuration
+# API Configuration (WAHA এর জন্য পরিবর্তিত)
 # ────────────────────────────────
 PERPLEXITY_API_KEY = "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"
-
-# WAHA API Configuration (WASender এর পরিবর্তে)
 WAHA_API_URL = "http://localhost:3000"  # আপনার WAHA সার্ভার URL
-WAHA_SESSION = "WAHA"  # আপনার session নাম
+WAHA_SESSION = "RITONNO"
 
 # ────────────────────────────────
 # Dermijan URLs (unchanged)
@@ -155,7 +151,7 @@ CONVERSATION RULES:
 
 Language-Specific Contact Information:
 - English: "To book an appointment, please call us at +91 9003444435 and our contact team will get in touch with you shortly."
-- Tamil: "அப்பாய்ன்ட்மென்ট் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
+- Tamil: "அப்பாய்ன்ட்மென்ট் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் উங்களை தொடর্পু कोल्लোम।"
 
 Remember: Apply research-backed formatting consistently. Every response should be scannable, mobile-friendly, and follow proven UX patterns."""
 
@@ -238,7 +234,7 @@ def detect_appointment_request(text):
     """Enhanced appointment detection based on user behavior research"""
     english_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 
                        'meet', 'appoint', 'booking', 'reserve', 'arrange']
-    tamil_keywords = ['அப்பாய்ன்ட்மென்ট்', 'புக்', 'சந்திப்பு', 'வருகை', 'நேரம்']
+    tamil_keywords = ['அப்பாய்ন்ট்মென্ট্', 'புক্', 'সন্ধিপ্পু', 'ওরুকৈ', 'নেরম']
     
     text_lower = text.lower()
     return (any(keyword in text_lower for keyword in english_keywords) or
@@ -277,7 +273,7 @@ def apply_research_based_formatting(text, user_question):
     # Add appointment info based on UX research on call-to-action placement
     if detect_appointment_request(user_question):
         if user_language == "tamil":
-            appointment_text = "\n\nঅ্যাপাইন্টমেন্ট বুক করতে, দয়া করে আমাদের +91 9003444435 এ কল করুন, আমাদের যোগাযোগ দল শীঘ্রই আপনার সাথে যোগাযোগ করবে।"
+            appointment_text = "\n\nঅপ্পায়ন্ট্মেন্ট্ পুক্ সেয়্য, তয়বুসেয়তু এঙ্গলৈ +91 9003444435 ইল্ আজৈক্কবুম, এঙ্গল্ তোদর্পু কুজু বিরৈভিল উঙ্গলৈ তোদর্পু কোল্লুম।"
         else:
             appointment_text = "\n\nTo book an appointment, please call us at +91 9003444435 and our contact team will get in touch with you shortly."
         
@@ -318,7 +314,7 @@ def get_perplexity_answer(question, uid):
     # Research-based language instructions
     if user_language == "tamil":
         language_instruction = "Respond ONLY in Tamil. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
-        not_found_msg = "அந্ত তকওল এল্গলে অগীকরিকপত সআদরগலিল কিদআকভিল্ল। তুলীজমঅন বিদরগরকে এল্গলে আদরv কুজুবঅ তדরbu কলবোম।"
+        not_found_msg = "অন্ত তকবল এঙ্গল অঙ্গীকরিক্কপ্পট্ট আদারঙ্গলিল কিদৈক্কবিল্লৈ। তুল্লিয়মান বিবরঙ্গলুক্কু এঙ্গল আদরবু কুজুবৈ তোদর্পু কোল্লবুম।"
     else:
         language_instruction = "Respond ONLY in English. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
         not_found_msg = "That information isn't available in our approved sources. Please contact our support team for accurate details."
@@ -370,14 +366,14 @@ def get_perplexity_answer(question, uid):
         else:
             print(f"Perplexity API error: {response.status_code} - {response.text}")
             if user_language == "tamil":
-                return "মনিক্কওম, এগলে sহেবঅ তরকলকমক কিদআকবiল।\n\nপিরকু মুয়রসিকভুম।"
+                return "মন্নিক্কবুম, এঙ্গল সেবৈ তর্কালিকমাক কিদৈক্কবিল্লৈ।\n\nপিরকু মুয়র্সিক্কবুম।"
             else:
                 return "Sorry, our service is temporarily unavailable.\n\nPlease try again later."
             
     except Exception as e:
         print(f"Perplexity exception: {e}")
         if user_language == "tamil":
-            return "মনিক্কওম, তজইlনুটপ সিকল অরপতু।\n\nপিরকু মুয়রসিকভুম।"
+            return "মন্নিক্কবুম, তোজিল্নুট্প সিক্কল এর্পট্টতু।\n\nপিরকু মুয়র্সিক্কবুম।"
         else:
             return "Sorry, there was a technical issue.\n\nPlease try again."
 
@@ -390,7 +386,7 @@ def extract_waha_messages(payload):
     try:
         if payload.get("event") == "message":
             data = payload.get("payload", {})
-            sender = data.get("from", "").replace("@c.us", "")
+            sender = data.get("from", "").replace("@c.us", "").replace("@s.whatsapp.net", "")
             text = data.get("body", "")
             
             if sender and text:
@@ -402,12 +398,7 @@ def extract_waha_messages(payload):
     return messages
 
 def send_waha_reply(to_phone, message):
-    """Send UX-optimized reply via WAHA API"""
-    if not WAHA_API_URL:
-        print("WAHA API URL missing")
-        return False
-    
-    # ফোন নম্বর ফরম্যাট: +8801234567890@c.us
+    """Send reply via WAHA API"""
     chat_id = f"{to_phone}@c.us"
     
     payload = {
@@ -451,7 +442,7 @@ def webhook_handler():
     """WhatsApp webhook handler with WAHA integration"""
     try:
         payload = request.get_json()
-        messages = extract_waha_messages(payload)
+        messages = extract_waha_messages(payload)  # Changed function name
         
         for sender, text in messages:
             # Skip bot messages to prevent loops
@@ -460,7 +451,7 @@ def webhook_handler():
                 continue
             
             answer = get_perplexity_answer(text, sender)
-            send_waha_reply(sender, answer)
+            send_waha_reply(sender, answer)  # Changed function name
         
         return jsonify({"status": "success"})
         
@@ -476,7 +467,7 @@ def get_conversation(user_id):
 
 @app.route("/", methods=["GET"])
 def health_check():
-    """Health check with UX feature status"""
+    """Health check with WAHA integration status"""
     try:
         redis_status = "connected" if redis_client.ping() else "disconnected"
     except:
