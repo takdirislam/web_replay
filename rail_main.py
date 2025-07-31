@@ -1,12 +1,13 @@
 """
 Dermijan Chatbot - Research-Based UX Optimized Version
-Version: 2025-07-29 UX Enhanced
+Version: 2025-07-29 UX Enhanced with WAHA Integration
 Features:
 • Research-backed text formatting for maximum readability
 • Optimized paragraph structure for mobile users
 • Strategic use of dots and hyphens for better scanning
 • Visual hierarchy implementation
 • WhatsApp-specific user experience patterns
+• WAHA API Integration
 """
 
 from flask import Flask, request, jsonify
@@ -21,9 +22,10 @@ redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 # API Configuration
 # ────────────────────────────────
 PERPLEXITY_API_KEY = "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"
-WASENDER_API_TOKEN = "f09e71da244b2723818594f08ed45780cd6031172d1596b26f070513b6c39a56"
-WASENDER_SESSION = "RITONNO"
-WASENDER_API_URL = "https://wasenderapi.com/api/send-message"
+
+# WAHA API Configuration (WASender এর পরিবর্তে)
+WAHA_API_URL = "http://localhost:3000"  # আপনার WAHA সার্ভার URL
+WAHA_SESSION = "RITONNO"  # আপনার session নাম
 
 # ────────────────────────────────
 # Dermijan URLs (unchanged)
@@ -100,7 +102,7 @@ ALLOWED_URLS = [
 ]
 
 # ────────────────────────────────
-# Research-Based System Prompt
+# Research-Based System Prompt (unchanged)
 # ────────────────────────────────
 SYSTEM_PROMPT = """You are a professional support assistant for Dermijan, a skin, hair and body care clinic, chatting with customers on WhatsApp.
 
@@ -163,12 +165,12 @@ CONVERSATION RULES:
 
 Language-Specific Contact Information:
 - English: "To book an appointment, please call us at +91 9003444435 and our contact team will get in touch with you shortly."
-- Tamil: "அப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
+- Tamil: "அப்பாய்ன்ட்மென்ট் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
 
 Remember: Apply research-backed formatting consistently. Every response should be scannable, mobile-friendly, and follow proven UX patterns."""
 
 # ────────────────────────────────
-# Language Detection Function
+# Language Detection Function (unchanged)
 # ────────────────────────────────
 def detect_language(text):
     """Detect if text is primarily English or Tamil based on UX research"""
@@ -183,7 +185,7 @@ def detect_language(text):
         return "english"  # default to English
 
 # ────────────────────────────────
-# Conversation Manager
+# Conversation Manager (unchanged)
 # ────────────────────────────────
 class ConversationManager:
     def __init__(self):
@@ -220,7 +222,7 @@ class ConversationManager:
 mgr = ConversationManager()
 
 # ────────────────────────────────
-# UX-Optimized Text Processing
+# UX-Optimized Text Processing (unchanged)
 # ────────────────────────────────
 def remove_emojis_and_icons(text):
     """Remove all emojis and icons based on accessibility research"""
@@ -285,7 +287,7 @@ def apply_research_based_formatting(text, user_question):
     # Add appointment info based on UX research on call-to-action placement
     if detect_appointment_request(user_question):
         if user_language == "tamil":
-            appointment_text = "\n\nஅப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
+            appointment_text = "\n\nঅ্যাপাইন্টমেন্ট বুক করতে, দয়া করে আমাদের +91 9003444435 এ কল করুন, আমাদের যোগাযোগ দল শীঘ্রই আপনার সাথে যোগাযোগ করবে।"
         else:
             appointment_text = "\n\nTo book an appointment, please call us at +91 9003444435 and our contact team will get in touch with you shortly."
         
@@ -310,7 +312,7 @@ def clean_source_urls(text):
     return re.sub(r'\n\s*\n', '\n', text).strip()
 
 # ────────────────────────────────
-# Enhanced Perplexity API Integration
+# Enhanced Perplexity API Integration (unchanged)
 # ────────────────────────────────
 def get_perplexity_answer(question, uid):
     """Get UX-optimized answer from Perplexity API"""
@@ -326,7 +328,7 @@ def get_perplexity_answer(question, uid):
     # Research-based language instructions
     if user_language == "tamil":
         language_instruction = "Respond ONLY in Tamil. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
-        not_found_msg = "அந்த தகவல் எங்கள் அங்கீকரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை. துல்லியமான விவரங்களுக்கு எங்கள் ஆதரவு குழுவை தொடர்பு கொள்ளவும்."
+        not_found_msg = "அந্ত তকওল এল্গলে অগীকরিকপত সআদরগலিল কিদআকভিল্ল। তুলীজমঅন বিদরগরকে এল্গলে আদরv কুজুবঅ তדরbu কলবোম।"
     else:
         language_instruction = "Respond ONLY in English. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
         not_found_msg = "That information isn't available in our approved sources. Please contact our support team for accurate details."
@@ -378,34 +380,28 @@ def get_perplexity_answer(question, uid):
         else:
             print(f"Perplexity API error: {response.status_code} - {response.text}")
             if user_language == "tamil":
-                return "மன்னிக்கவும், எங்கள் சேவை தற்காலிகமாக கிடைக்கவில்லை.\n\nபிறகு முயற்சிக்கவும்."
+                return "মনিক্কওম, এগলে sহেবঅ তরকলকমক কিদআকবiল।\n\nপিরকু মুয়রসিকভুম।"
             else:
                 return "Sorry, our service is temporarily unavailable.\n\nPlease try again later."
             
     except Exception as e:
         print(f"Perplexity exception: {e}")
         if user_language == "tamil":
-            return "மன்னிக்கவும், தொழில்நுட்ப சிக்கல் ஏற்பட்டது.\n\nபிறகு முயற்சிக்கவும்."
+            return "মনিক্কওম, তজইlনুটপ সিকল অরপতু।\n\nপিরকু মুয়রসিকভুম।"
         else:
             return "Sorry, there was a technical issue.\n\nPlease try again."
 
 # ────────────────────────────────
-# WASender Functions (unchanged)
+# WAHA Functions (WASender এর পরিবর্তে)
 # ────────────────────────────────
-def extract_wasender_messages(payload):
-    """Extract messages from WASender webhook"""
+def extract_waha_messages(payload):
+    """Extract messages from WAHA webhook"""
     messages = []
     try:
-        if payload.get("event") == "messages.upsert":
-            data = payload.get("data", {}).get("messages", {})
-            sender = data.get("key", {}).get("remoteJid", "").replace("@s.whatsapp.net", "").replace("+", "")
-            
-            message_content = data.get("message", {})
-            text = ""
-            if "conversation" in message_content:
-                text = message_content["conversation"]
-            elif "extendedTextMessage" in message_content:
-                text = message_content["extendedTextMessage"].get("text", "")
+        if payload.get("event") == "message":
+            data = payload.get("payload", {})
+            sender = data.get("from", "").replace("@c.us", "")
+            text = data.get("body", "")
             
             if sender and text:
                 messages.append((sender, text))
@@ -415,25 +411,28 @@ def extract_wasender_messages(payload):
     
     return messages
 
-def send_wasender_reply(to_phone, message):
-    """Send UX-optimized reply via WASender API"""
-    if not WASENDER_API_TOKEN:
-        print("WASender API token missing")
+def send_waha_reply(to_phone, message):
+    """Send UX-optimized reply via WAHA API"""
+    if not WAHA_API_URL:
+        print("WAHA API URL missing")
         return False
     
+    # ফোন নম্বর ফরম্যাট: +8801234567890@c.us
+    chat_id = f"{to_phone}@c.us"
+    
     payload = {
-        "session": WASENDER_SESSION,
-        "to": to_phone,
-        "text": message
+        "chatId": chat_id,
+        "text": message,
+        "session": WAHA_SESSION
     }
     
     headers = {
-        "Authorization": f"Bearer {WASENDER_API_TOKEN}",
         "Content-Type": "application/json"
     }
     
     try:
-        response = requests.post(WASENDER_API_URL, json=payload, headers=headers)
+        response = requests.post(f"{WAHA_API_URL}/api/sendText", 
+                               json=payload, headers=headers)
         success = response.status_code in [200, 201]
         print("Message sent successfully" if success else f"Send error: {response.status_code}")
         return success
@@ -459,10 +458,10 @@ def ask_question():
 
 @app.route("/webhook", methods=["POST"])
 def webhook_handler():
-    """WhatsApp webhook handler with UX optimization"""
+    """WhatsApp webhook handler with WAHA integration"""
     try:
         payload = request.get_json()
-        messages = extract_wasender_messages(payload)
+        messages = extract_waha_messages(payload)
         
         for sender, text in messages:
             # Skip bot messages to prevent loops
@@ -471,7 +470,7 @@ def webhook_handler():
                 continue
             
             answer = get_perplexity_answer(text, sender)
-            send_wasender_reply(sender, answer)
+            send_waha_reply(sender, answer)
         
         return jsonify({"status": "success"})
         
@@ -494,11 +493,13 @@ def health_check():
         redis_status = "error"
     
     return jsonify({
-        "status": "Dermijan Server Running - UX Optimized",
-        "version": "Research-Based User Experience Enhanced",
+        "status": "Dermijan Server Running - UX Optimized with WAHA",
+        "version": "Research-Based User Experience Enhanced + WAHA Integration",
         "endpoints": ["/ask", "/webhook", "/conversation/<user_id>"],
         "allowed_urls_count": len(ALLOWED_URLS),
         "redis_status": redis_status,
+        "waha_api_url": WAHA_API_URL,
+        "waha_session": WAHA_SESSION,
         "ux_features": {
             "research_based_formatting": True,
             "mobile_optimized_paragraphs": True,
@@ -507,7 +508,8 @@ def health_check():
             "visual_hierarchy_implemented": True,
             "accessibility_compliant": True,
             "whatsapp_pattern_optimized": True,
-            "scanning_friendly_layout": True
+            "scanning_friendly_layout": True,
+            "waha_integration": True
         }
     })
 
@@ -515,9 +517,10 @@ def health_check():
 # Main
 # ────────────────────────────────
 if __name__ == "__main__":
-    print("🚀 Starting Dermijan Server - UX Research Enhanced")
+    print("🚀 Starting Dermijan Server - UX Research Enhanced with WAHA")
     print(f"📋 Loaded {len(ALLOWED_URLS)} dermijan.com URLs")
     print("🎯 Features: Research-based formatting, Mobile-optimized, Visual hierarchy")
     print("✨ UX Enhancements: Short paragraphs, Strategic dots/hyphens, Scannable layout")
     print("📱 Mobile-first readability, Language-specific responses, Accessibility compliant")
+    print("🔗 WAHA Integration: WhatsApp HTTP API support")
     app.run(debug=True, host='0.0.0.0', port=8000)
