@@ -27,8 +27,8 @@ redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 # ────────────────────────────────
 # WAHA API Configuration
 # ────────────────────────────────
-WAHA_API_URL = "http:/localhost:3000/api"  # Your WAHA server URL
-WAHA_API_KEY = "your-waha-api-key"  # WAHA API key
+WAHA_API_URL = "https://waha.devlike.pro"  # Your WAHA server URL
+WAHA_API_KEY = "admin"  # WAHA API key
 WAHA_SESSION_NAME = "DERMIJAN_BOT"  # Session name
 
 # WAHA API Headers
