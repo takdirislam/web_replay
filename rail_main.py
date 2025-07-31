@@ -1,3 +1,14 @@
+"""
+Dermijan Chatbot - Research-Based UX Optimized Version
+Version: 2025-07-29 UX Enhanced
+Features:
+• Research-backed text formatting for maximum readability
+• Optimized paragraph structure for mobile users
+• Strategic use of dots and hyphens for better scanning
+• Visual hierarchy implementation
+• WhatsApp-specific user experience patterns
+"""
+
 from flask import Flask, request, jsonify
 from datetime import datetime
 import requests, json, os, redis, re
@@ -7,101 +18,12 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 # ────────────────────────────────
-# WAHA API Configuration
+# API Configuration
 # ────────────────────────────────
-PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "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")
-
-# WAHA Configuration
-WAHA_BASE_URL = os.getenv("WAHA_BASE_URL", "http://localhost:3000")  # Your WAHA server URL
-WAHA_API_KEY = os.getenv("WAHA_API_KEY", "your-waha-api-key")  # If authentication required
-
-# Multiple Session Management
-ACTIVE_SESSIONS = {}  # Store active sessions
-DEFAULT_SESSION = "default"
-
-# ────────────────────────────────
-# Multiple User Session Manager
-# ────────────────────────────────
-class SessionManager:
-    def __init__(self):
-        self.sessions = {}
-        self.load_sessions_from_redis()
-    
-    def load_sessions_from_redis(self):
-        """Load active sessions from Redis"""
-        try:
-            sessions_data = redis_client.get("waha_active_sessions")
-            if sessions_data:
-                self.sessions = json.loads(sessions_data)
-                print(f"Loaded {len(self.sessions)} active sessions")
-        except Exception as e:
-            print(f"Error loading sessions: {e}")
-    
-    def save_sessions_to_redis(self):
-        """Save active sessions to Redis"""
-        try:
-            redis_client.set("waha_active_sessions", json.dumps(self.sessions))
-        except Exception as e:
-            print(f"Error saving sessions: {e}")
-    
-    def add_session(self, session_name, config=None):
-        """Add new session"""
-        self.sessions[session_name] = {
-            "name": session_name,
-            "status": "active",
-            "created_at": datetime.now().isoformat(),
-            "config": config or {},
-            "message_count": 0
-        }
-        self.save_sessions_to_redis()
-        return True
-    
-    def get_session(self, session_name):
-        """Get session info"""
-        return self.sessions.get(session_name)
-    
-    def get_all_sessions(self):
-        """Get all sessions"""
-        return self.sessions
-    
-    def remove_session(self, session_name):
-        """Remove session"""
-        if session_name in self.sessions:
-            del self.sessions[session_name]
-            self.save_sessions_to_redis()
-            return True
-        return False
-    
-    def get_session_for_user(self, user_phone):
-        """Get appropriate session for user"""
-        # Simple routing - can be enhanced based on business logic
-        user_session_key = f"user_session:{user_phone}"
-        assigned_session = redis_client.get(user_session_key)
-        
-        if assigned_session and assigned_session in self.sessions:
-            return assigned_session
-        else:
-            # Assign to default or least loaded session
-            if self.sessions:
-                # Find session with least messages
-                least_loaded = min(self.sessions.items(), 
-                                 key=lambda x: x[1].get("message_count", 0))
-                session_name = least_loaded[0]
-            else:
-                session_name = DEFAULT_SESSION
-                self.add_session(DEFAULT_SESSION)
-            
-            # Store assignment
-            redis_client.setex(user_session_key, 86400, session_name)  # 24 hours
-            return session_name
-    
-    def increment_message_count(self, session_name):
-        """Increment message count for session"""
-        if session_name in self.sessions:
-            self.sessions[session_name]["message_count"] += 1
-            self.save_sessions_to_redis()
-
-session_manager = SessionManager()
+PERPLEXITY_API_KEY = "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"
+WASENDER_API_TOKEN = "f09e71da244b2723818594f08ed45780cd6031172d1596b26f070513b6c39a56"
+WASENDER_SESSION = "RITONNO"
+WASENDER_API_URL = "https://wasenderapi.com/api/send-message"
 
 # ────────────────────────────────
 # Dermijan URLs (unchanged)
@@ -241,7 +163,7 @@ CONVERSATION RULES:
 
 Language-Specific Contact Information:
 - English: "To book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
-- Tamil: "அப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை *+91 9003444435* இல் அழைக்கவும், எங்கள் தொடர்பু குழু விরைவில் உங்களை தொடர்பு கொள்ளும்।"
+- Tamil: "அப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை *+91 9003444435* இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
 
 Remember: Apply research-backed formatting consistently. Every response should be scannable, mobile-friendly, and follow proven UX patterns."""
 
@@ -324,7 +246,7 @@ def detect_appointment_request(text):
     """Enhanced appointment detection based on user behavior research"""
     english_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 
                        'meet', 'appoint', 'booking', 'reserve', 'arrange']
-    tamil_keywords = ['அப்பாய்ன்ட்மென்ட்', 'புக்', 'சந்திப்பு', 'வருகை', 'நேரம்']
+    tamil_keywords = ['அப்பாய்ன்ட்மென்ট்', 'புக்', 'சந்திப்பு', 'வருகை', 'நேரம்']
     
     text_lower = text.lower()
     return (any(keyword in text_lower for keyword in english_keywords) or
@@ -363,7 +285,7 @@ def apply_research_based_formatting(text, user_question):
     # Add appointment info based on UX research on call-to-action placement
     if detect_appointment_request(user_question):
         if user_language == "tamil":
-            appointment_text = "\n\nஅப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை *+91 9003444435* இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்।"
+            appointment_text = "\n\nஅப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை *+91 9003444435* இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
         else:
             appointment_text = "\n\nTo book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
         
@@ -404,7 +326,7 @@ def get_perplexity_answer(question, uid):
     # Research-based language instructions
     if user_language == "tamil":
         language_instruction = "Respond ONLY in Tamil. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
-        not_found_msg = "அந்த தகவல் எங்கள் அங்கீகரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை. துல்லியமான விவரங்களுக்கு எங்கள் ஆதரவு குழுவை தொடர்பு கொள்ளவும்।"
+        not_found_msg = "அந்த தகவல் எங்கள் அங்கீকரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை. துல்லியமான விவரங்களுக்கு எங்கள் ஆதரவு குழுவை தொடர்பு கொள்ளவும்."
     else:
         language_instruction = "Respond ONLY in English. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
         not_found_msg = "That information isn't available in our approved sources. Please contact our support team for accurate details."
@@ -456,126 +378,68 @@ def get_perplexity_answer(question, uid):
         else:
             print(f"Perplexity API error: {response.status_code} - {response.text}")
             if user_language == "tamil":
-                return "மன்னிக்கவும், எங்கள் சேவை தற்காலிகமாக கிடைக்கவில்லை.\n\nபிறகு முயற்சிக்கவும்।"
+                return "மன்னிக்கவும், எங்கள் சேவை தற்காலிகமாக கிடைக்கவில்லை.\n\nபிறகு முயற்சிக்கவும்."
             else:
                 return "Sorry, our service is temporarily unavailable.\n\nPlease try again later."
             
     except Exception as e:
         print(f"Perplexity exception: {e}")
         if user_language == "tamil":
-            return "மன்னிக்கவும், தொழில்நுட்ப சிக்கல் ஏற்பட்டது.\n\nபிறகு முயற்சிக்கவும்।"
+            return "மன்னிக்கவும், தொழில்நுட்ப சிக்கல் ஏற்பட்டது.\n\nபிறகு முயற்சிக்கவும்."
         else:
             return "Sorry, there was a technical issue.\n\nPlease try again."
 
 # ────────────────────────────────
-# WAHA Functions
+# WASender Functions (unchanged)
 # ────────────────────────────────
-def extract_waha_messages(payload):
-    """Extract messages from WAHA webhook"""
+def extract_wasender_messages(payload):
+    """Extract messages from WASender webhook"""
     messages = []
     try:
-        # WAHA webhook format
-        if payload.get("event") == "message":
-            session = payload.get("session", DEFAULT_SESSION)
-            data = payload.get("payload", {})
+        if payload.get("event") == "messages.upsert":
+            data = payload.get("data", {}).get("messages", {})
+            sender = data.get("key", {}).get("remoteJid", "").replace("@s.whatsapp.net", "").replace("+", "")
             
-            # Extract sender
-            sender = data.get("from", "")
-            if "@c.us" in sender:
-                sender = sender.replace("@c.us", "")
-            
-            # Extract message content
+            message_content = data.get("message", {})
             text = ""
-            if data.get("type") == "chat":
-                text = data.get("body", "")
-            elif data.get("type") == "text":
-                text = data.get("text", {}).get("body", "")
+            if "conversation" in message_content:
+                text = message_content["conversation"]
+            elif "extendedTextMessage" in message_content:
+                text = message_content["extendedTextMessage"].get("text", "")
             
             if sender and text:
-                messages.append((sender, text, session))
-                print(f"Message from {sender} in session {session}: {text[:50]}...")
+                messages.append((sender, text))
                 
     except Exception as e:
         print(f"Message extraction error: {e}")
     
     return messages
 
-def send_waha_reply(to_phone, message, session_name=None):
-    """Send UX-optimized reply via WAHA API"""
-    if not session_name:
-        session_name = session_manager.get_session_for_user(to_phone)
-    
-    # Prepare phone number for WAHA
-    phone = to_phone.replace("+", "")
-    if not phone.endswith("@c.us"):
-        phone = f"{phone}@c.us"
-    
-    # WAHA send message endpoint
-    url = f"{WAHA_BASE_URL}/api/sendText"
+def send_wasender_reply(to_phone, message):
+    """Send UX-optimized reply via WASender API"""
+    if not WASENDER_API_TOKEN:
+        print("WASender API token missing")
+        return False
     
     payload = {
-        "session": session_name,
-        "chatId": phone,
+        "session": WASENDER_SESSION,
+        "to": to_phone,
         "text": message
     }
     
-    headers = {"Content-Type": "application/json"}
-    if WAHA_API_KEY and WAHA_API_KEY != "your-waha-api-key":
-        headers["Authorization"] = f"Bearer {WAHA_API_KEY}"
+    headers = {
+        "Authorization": f"Bearer {WASENDER_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
     
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response = requests.post(WASENDER_API_URL, json=payload, headers=headers)
         success = response.status_code in [200, 201]
-        
-        if success:
-            print(f"Message sent successfully via session {session_name}")
-            session_manager.increment_message_count(session_name)
-        else:
-            print(f"Send error: {response.status_code} - {response.text}")
-        
+        print("Message sent successfully" if success else f"Send error: {response.status_code}")
         return success
     except Exception as e:
         print(f"Send error: {e}")
         return False
-
-def get_waha_sessions():
-    """Get all WAHA sessions from server"""
-    try:
-        url = f"{WAHA_BASE_URL}/api/sessions"
-        headers = {}
-        if WAHA_API_KEY and WAHA_API_KEY != "your-waha-api-key":
-            headers["Authorization"] = f"Bearer {WAHA_API_KEY}"
-        
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            print(f"Error getting WAHA sessions: {response.status_code}")
-            return []
-    except Exception as e:
-        print(f"Error getting WAHA sessions: {e}")
-        return []
-
-def start_waha_session(session_name):
-    """Start a new WAHA session"""
-    try:
-        url = f"{WAHA_BASE_URL}/api/sessions/start"
-        payload = {"name": session_name}
-        headers = {"Content-Type": "application/json"}
-        if WAHA_API_KEY and WAHA_API_KEY != "your-waha-api-key":
-            headers["Authorization"] = f"Bearer {WAHA_API_KEY}"
-        
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-        success = response.status_code in [200, 201]
-        
-        if success:
-            session_manager.add_session(session_name)
-            print(f"WAHA session {session_name} started successfully")
-        
-        return success, response.json() if success else response.text
-    except Exception as e:
-        print(f"Error starting WAHA session: {e}")
-        return False, str(e)
 
 # ────────────────────────────────
 # Flask Routes
@@ -595,22 +459,21 @@ def ask_question():
 
 @app.route("/webhook", methods=["POST"])
 def webhook_handler():
-    """WAHA webhook handler with multiple user support"""
+    """WhatsApp webhook handler with UX optimization"""
     try:
         payload = request.get_json()
-        messages = extract_waha_messages(payload)
+        messages = extract_wasender_messages(payload)
         
-        for sender, text, session in messages:
+        for sender, text in messages:
             # Skip bot messages to prevent loops
             skip_phrases = ["Sources:", "dermijan.com", "isn't available in our approved sources"]
             if any(phrase.lower() in text.lower() for phrase in skip_phrases):
                 continue
             
-            print(f"Processing message from {sender} in session {session}: {text}")
             answer = get_perplexity_answer(text, sender)
-            send_waha_reply(sender, answer, session)
+            send_wasender_reply(sender, answer)
         
-        return jsonify({"status": "success", "processed": len(messages)})
+        return jsonify({"status": "success"})
         
     except Exception as e:
         print(f"Webhook error: {e}")
@@ -622,120 +485,20 @@ def get_conversation(user_id):
     history = mgr.get_history(user_id)
     return jsonify({"user_id": user_id, "conversation": history, "count": len(history)})
 
-# ────────────────────────────────
-# Multiple User Management Routes
-# ────────────────────────────────
-@app.route("/sessions", methods=["GET"])
-def list_sessions():
-    """List all active sessions"""
-    waha_sessions = get_waha_sessions()
-    managed_sessions = session_manager.get_all_sessions()
-    
-    return jsonify({
-        "waha_sessions": waha_sessions,
-        "managed_sessions": managed_sessions,
-        "total_managed": len(managed_sessions)
-    })
-
-@app.route("/sessions/<session_name>", methods=["POST"])
-def create_session(session_name):
-    """Create new session"""
-    success, result = start_waha_session(session_name)
-    
-    if success:
-        return jsonify({
-            "status": "success",
-            "message": f"Session {session_name} created successfully",
-            "session_info": result
-        })
-    else:
-        return jsonify({
-            "status": "error",
-            "message": f"Failed to create session {session_name}",
-            "error": result
-        }), 500
-
-@app.route("/sessions/<session_name>", methods=["DELETE"])
-def remove_session(session_name):
-    """Remove session"""
-    removed = session_manager.remove_session(session_name)
-    
-    if removed:
-        return jsonify({
-            "status": "success",
-            "message": f"Session {session_name} removed successfully"
-        })
-    else:
-        return jsonify({
-            "status": "error",
-            "message": f"Session {session_name} not found"
-        }), 404
-
-@app.route("/users/<user_phone>/session", methods=["GET"])
-def get_user_session(user_phone):
-    """Get assigned session for user"""
-    session_name = session_manager.get_session_for_user(user_phone)
-    session_info = session_manager.get_session(session_name)
-    
-    return jsonify({
-        "user_phone": user_phone,
-        "assigned_session": session_name,
-        "session_info": session_info
-    })
-
-@app.route("/users/<user_phone>/session", methods=["POST"])
-def assign_user_session(user_phone):
-    """Assign specific session to user"""
-    data = request.get_json()
-    session_name = data.get("session_name")
-    
-    if not session_name:
-        return jsonify({"error": "session_name required"}), 400
-    
-    if session_name not in session_manager.sessions:
-        return jsonify({"error": "Session not found"}), 404
-    
-    # Store assignment
-    user_session_key = f"user_session:{user_phone}"
-    redis_client.setex(user_session_key, 86400, session_name)
-    
-    return jsonify({
-        "status": "success",
-        "message": f"User {user_phone} assigned to session {session_name}"
-    })
-
 @app.route("/", methods=["GET"])
 def health_check():
-    """Health check with multiple user support status"""
+    """Health check with UX feature status"""
     try:
         redis_status = "connected" if redis_client.ping() else "disconnected"
     except:
         redis_status = "error"
     
-    waha_sessions = get_waha_sessions()
-    managed_sessions = session_manager.get_all_sessions()
-    
     return jsonify({
-        "status": "Dermijan Server Running - UX Optimized with WAHA Multiple User Support",
-        "version": "Research-Based User Experience Enhanced + WAHA API + Multi-User",
-        "endpoints": [
-            "/ask", "/webhook", "/conversation/<user_id>", 
-            "/sessions", "/sessions/<name>", "/users/<phone>/session"
-        ],
+        "status": "Dermijan Server Running - UX Optimized",
+        "version": "Research-Based User Experience Enhanced",
+        "endpoints": ["/ask", "/webhook", "/conversation/<user_id>"],
         "allowed_urls_count": len(ALLOWED_URLS),
         "redis_status": redis_status,
-        "waha_integration": {
-            "base_url": WAHA_BASE_URL,
-            "api_key_configured": WAHA_API_KEY != "your-waha-api-key",
-            "active_waha_sessions": len(waha_sessions),
-            "managed_sessions": len(managed_sessions)
-        },
-        "multi_user_features": {
-            "session_management": True,
-            "user_assignment": True,
-            "load_balancing": True,
-            "session_monitoring": True
-        },
         "ux_features": {
             "research_based_formatting": True,
             "mobile_optimized_paragraphs": True,
@@ -752,18 +515,9 @@ def health_check():
 # Main
 # ────────────────────────────────
 if __name__ == "__main__":
-    # Initialize default session if none exist
-    if not session_manager.sessions:
-        session_manager.add_session(DEFAULT_SESSION)
-        print(f"Created default session: {DEFAULT_SESSION}")
-    
-    print("🚀 Starting Dermijan Server - UX Research Enhanced with WAHA Multi-User Support")
+    print("🚀 Starting Dermijan Server - UX Research Enhanced")
     print(f"📋 Loaded {len(ALLOWED_URLS)} dermijan.com URLs")
     print("🎯 Features: Research-based formatting, Mobile-optimized, Visual hierarchy")
     print("✨ UX Enhancements: Short paragraphs, Strategic dots/hyphens, Scannable layout")
     print("📱 Mobile-first readability, Language-specific responses, Accessibility compliant")
-    print("🔗 WAHA Integration: Multiple sessions, User assignment, Load balancing")
-    print(f"🌐 WAHA Server: {WAHA_BASE_URL}")
-    print(f"📊 Active Sessions: {len(session_manager.sessions)}")
-    
     app.run(debug=True, host='0.0.0.0', port=8000)
