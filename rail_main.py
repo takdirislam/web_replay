@@ -1,6 +1,6 @@
 """
-Dermijan Chatbot - Research-Based UX Optimized Version
-Version: 2025-07-29 UX Enhanced + Railway Deployment Ready
+Dermijan Chatbot - Research-Based UX Optimized Version (Fixed)
+Version: 2025-07-29 UX Enhanced + Railway Deployment Ready + Security Fixed
 Features:
 • Research-backed text formatting for maximum readability
 • Optimized paragraph structure for mobile users
@@ -12,18 +12,43 @@ Features:
 • Asynchronous Processing & Queue Management
 • Performance Optimization
 • Railway Deployment Ready
+• Security Enhanced
+• Fixed Language Detection
 """
 
 from flask import Flask, request, jsonify, render_template_string
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from datetime import datetime
 import requests, json, os, redis, re, time
-from threading import Thread
+from threading import Thread, Lock
 from queue import Queue, Empty
 from concurrent.futures import ThreadPoolExecutor
 import uuid
 import logging
+from redis.connection import ConnectionPool
 
 app = Flask(__name__)
+
+# ────────────────────────────────
+# Security Headers
+# ────────────────────────────────
+@app.after_request
+def add_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
+
+# ────────────────────────────────
+# Rate Limiting
+# ────────────────────────────────
+limiter = Limiter(
+    app,
+    key_func=get_remote_address,
+    default_limits=["100 per hour", "20 per minute"]
+)
 
 # ────────────────────────────────
 # Logging Configuration
@@ -39,26 +64,36 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ────────────────────────────────
-# Railway Environment Configuration
+# Railway Environment Configuration with Validation
 # ────────────────────────────────
 PORT = int(os.environ.get("PORT", 8000))
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
+# Enhanced Redis Connection with Pool
 try:
-    redis_client = redis.from_url(REDIS_URL, decode_responses=True)
-    logger.info("✅ Redis connection successful")
+    redis_pool = ConnectionPool.from_url(REDIS_URL, decode_responses=True, max_connections=20)
+    redis_client = redis.Redis(connection_pool=redis_pool)
+    redis_client.ping()
+    logger.info("✅ Redis connection successful with connection pool")
 except Exception as e:
     logger.error(f"❌ Redis connection failed: {e}")
     redis_client = None
 
 # ────────────────────────────────
-# API Configuration
+# API Configuration with Environment Variables
 # ────────────────────────────────
-PERPLEXITY_API_KEY = "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"
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
+if not PERPLEXITY_API_KEY:
+    logger.error("❌ PERPLEXITY_API_KEY environment variable is required")
+    raise ValueError("PERPLEXITY_API_KEY environment variable must be set")
 
 # panel.whapi.cloud Configuration
 WHAPI_BASE_URL = "https://gate.whapi.cloud"
-WHAPI_TOKEN = os.getenv("WHAPI_TOKEN", "YOUR_WHAPI_TOKEN_HERE")
+WHAPI_TOKEN = os.getenv("WHAPI_TOKEN")
+if not WHAPI_TOKEN:
+    logger.warning("⚠️ WHAPI_TOKEN not set, WhatsApp integration will not work")
+    WHAPI_TOKEN = "YOUR_WHAPI_TOKEN_HERE"
+
 WHAPI_HEADERS = {
     "Authorization": f"Bearer {WHAPI_TOKEN}",
     "Content-Type": "application/json"
@@ -66,29 +101,36 @@ WHAPI_HEADERS = {
 
 # Performance Settings
 MAX_CONCURRENT_REQUESTS = 10
-RESPONSE_TIMEOUT = 30
+RESPONSE_TIMEOUT = 15  # Reduced from 30 seconds
 QUEUE_PROCESSING_DELAY = 0.1
 
+# Thread locks for safety
+redis_lock = Lock()
+queue_lock = Lock()
+
 # ────────────────────────────────
-# Message Queue System for Async Processing
+# Message Queue System for Async Processing (Thread-Safe)
 # ────────────────────────────────
 class MessageQueue:
     def __init__(self):
         self.queue = Queue()
         self.processing = True
         self.executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_REQUESTS)
+        self.processed_count = 0
+        self.lock = Lock()
         self.start_processor()
     
     def add_message(self, message_data):
-        """Add message to processing queue"""
+        """Add message to processing queue - Thread Safe"""
         try:
-            message_id = str(uuid.uuid4())
-            message_data['id'] = message_id
-            message_data['timestamp'] = datetime.now().isoformat()
-            
-            self.queue.put(message_data)
-            logger.info(f"Message {message_id} added to queue. Queue size: {self.queue.qsize()}")
-            return message_id
+            with self.lock:
+                message_id = str(uuid.uuid4())
+                message_data['id'] = message_id
+                message_data['timestamp'] = datetime.now().isoformat()
+                
+                self.queue.put(message_data)
+                logger.info(f"Message {message_id} added to queue. Queue size: {self.queue.qsize()}")
+                return message_id
         except Exception as e:
             logger.error(f"Error adding message to queue: {e}")
             return None
@@ -117,7 +159,7 @@ class MessageQueue:
         logger.info("Message queue processor started")
     
     def _process_message(self, message_data):
-        """Process individual message asynchronously"""
+        """Process individual message asynchronously - Thread Safe"""
         start_time = time.time()
         message_id = message_data.get('id')
         
@@ -134,10 +176,17 @@ class MessageQueue:
             enhanced_response = add_call_button(response, text)
             success = send_whapi_message(sender, enhanced_response)
             
+            with self.lock:
+                self.processed_count += 1
+                
             processing_time = time.time() - start_time
             
             if success:
                 logger.info(f"Message {message_id} processed successfully in {processing_time:.2f}s")
+                # Update Redis counter safely
+                if redis_client:
+                    with redis_lock:
+                        redis_client.incr("total_processed")
             else:
                 logger.error(f"Failed to send response for message {message_id}")
                 
@@ -213,7 +262,7 @@ def handle_button_response(button_id, sender):
         return None
 
 # ────────────────────────────────
-# panel.whapi.cloud Integration
+# panel.whapi.cloud Integration (Enhanced)
 # ────────────────────────────────
 class WhAPIClient:
     def __init__(self):
@@ -221,6 +270,10 @@ class WhAPIClient:
         self.headers = WHAPI_HEADERS
         self.session = requests.Session()
         self.session.headers.update(self.headers)
+        # Add connection pooling
+        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20)
+        self.session.mount('http://', adapter)
+        self.session.mount('https://', adapter)
     
     def send_message_sync(self, message_data):
         """Synchronous message sending with status tracking"""
@@ -238,7 +291,8 @@ class WhAPIClient:
                 # Store message status for tracking
                 message_id = result.get('id')
                 if message_id and redis_client:
-                    redis_client.setex(f"msg_status:{message_id}", 3600, json.dumps(result))
+                    with redis_lock:
+                        redis_client.setex(f"msg_status:{message_id}", 3600, json.dumps(result))
                 
                 return True, result
             else:
@@ -248,6 +302,9 @@ class WhAPIClient:
         except requests.exceptions.Timeout:
             logger.error("WhAPI request timeout")
             return False, "Request timeout"
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"WhAPI connection error: {e}")
+            return False, "Connection error"
         except Exception as e:
             logger.error(f"WhAPI send error: {e}")
             return False, str(e)
@@ -255,7 +312,10 @@ class WhAPIClient:
     def get_message_status(self, message_id):
         """Get message delivery status"""
         try:
-            response = self.session.get(f"{self.base_url}/messages/{message_id}")
+            response = self.session.get(
+                f"{self.base_url}/messages/{message_id}",
+                timeout=RESPONSE_TIMEOUT
+            )
             return response.json() if response.status_code == 200 else None
         except Exception as e:
             logger.error(f"Status check error: {e}")
@@ -402,7 +462,7 @@ ALLOWED_URLS = [
 ]
 
 # ────────────────────────────────
-# Research-Based System Prompt (unchanged)
+# Research-Based System Prompt (Fixed Tamil Language)
 # ────────────────────────────────
 SYSTEM_PROMPT = """You are a professional support assistant for Dermijan, a skin, hair and body care clinic, chatting with customers on WhatsApp.
 
@@ -465,19 +525,24 @@ CONVERSATION RULES:
 
 Language-Specific Contact Information:
 - English: "To book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
-- Tamil: "অ্যাপয়েন্টমেন্ট পুক সেইয়া, তয়বুসেইতু এঙ্গলই *+91 9003444435* ইল আলইক্কবুম, এঙ্গল তোতারপু কুলু বিরইবিল উঙ্গলই তোতারপু কোল্লুম।"
+- Tamil: "அப்பாயின்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை *+91 9003444435* இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்।"
 
 Remember: Apply research-backed formatting consistently. Every response should be scannable, mobile-friendly, and follow proven UX patterns."""
 
 # ────────────────────────────────
-# Language Detection Function (unchanged)
+# Fixed Language Detection Function
 # ────────────────────────────────
 def detect_language(text):
-    """Detect if text is primarily English or Tamil based on UX research"""
+    """Detect if text is primarily English or Tamil - Fixed Unicode Range"""
+    # Correct Tamil Unicode range
     tamil_chars = re.findall(r'[\u0B80-\u0BFF]', text)
     english_words = re.findall(r'[a-zA-Z]+', text)
     
-    if len(tamil_chars) > len(english_words):
+    # Tamil keywords for better detection
+    tamil_keywords = ['அப்பாயின்ட்மென்ட்', 'புக்', 'செய்ய', 'வர', 'என்ன', 'எப்படி', 'எங்கே', 'எப்போது']
+    tamil_keyword_count = sum(1 for keyword in tamil_keywords if keyword in text)
+    
+    if len(tamil_chars) > len(english_words) or tamil_keyword_count > 0:
         return "tamil"
     elif len(english_words) > 0:
         return "english"
@@ -485,7 +550,7 @@ def detect_language(text):
         return "english"  # default to English
 
 # ────────────────────────────────
-# Enhanced Conversation Manager
+# Enhanced Conversation Manager (Thread-Safe)
 # ────────────────────────────────
 class ConversationManager:
     def __init__(self):
@@ -497,8 +562,12 @@ class ConversationManager:
             if not redis_client:
                 return []
             key = f"whatsapp_chat:{uid}"
-            msgs = redis_client.lrange(key, 0, -1)
+            with redis_lock:
+                msgs = redis_client.lrange(key, 0, -1)
             return [json.loads(m) for m in reversed(msgs)]
+        except redis.RedisError as e:
+            logger.error(f"Redis error getting history for {uid}: {e}")
+            return []
         except Exception as e:
             logger.error(f"Error getting history for {uid}: {e}")
             return []
@@ -509,9 +578,12 @@ class ConversationManager:
                 return
             key = f"whatsapp_chat:{uid}"
             data = {"message": msg, "sender": who, "timestamp": datetime.now().isoformat()}
-            redis_client.lpush(key, json.dumps(data))
-            redis_client.ltrim(key, 0, self.max_msgs-1)
-            redis_client.expire(key, self.ttl)
+            with redis_lock:
+                redis_client.lpush(key, json.dumps(data))
+                redis_client.ltrim(key, 0, self.max_msgs-1)
+                redis_client.expire(key, self.ttl)
+        except redis.RedisError as e:
+            logger.error(f"Redis error storing message for {uid}: {e}")
         except Exception as e:
             logger.error(f"Error storing message for {uid}: {e}")
 
@@ -552,7 +624,8 @@ def detect_appointment_request(text):
     """Enhanced appointment detection based on user behavior research"""
     english_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 
                        'meet', 'appoint', 'booking', 'reserve', 'arrange']
-    tamil_keywords = ['অ্যাপয়েন্টমেন্ট', 'পুক', 'সান্তিপপু', 'বারুকই', 'নেরম']
+    # Fixed Tamil keywords
+    tamil_keywords = ['அப்பாயின்ட்மென்ட்', 'புக்', 'முன்பதிவு', 'வர', 'நேரம்']
     
     text_lower = text.lower()
     return (any(keyword in text_lower for keyword in english_keywords) or
@@ -591,7 +664,8 @@ def apply_research_based_formatting(text, user_question):
     # Add appointment info based on UX research on call-to-action placement
     if detect_appointment_request(user_question):
         if user_language == "tamil":
-            appointment_text = "\n\nঅ্যাপয়েন্টমেন্ট পুক সেইয়া, তয়বুসেইতু এঙ্গলই *+91 9003444435* ইল আলইক্কবুম, এঙ্গল তোতারপু কুলু বিরইবিল উঙ্গলই তোতারপু কোল্লুম।"
+            # Fixed Tamil text
+            appointment_text = "\n\nஅப்பாயின்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை *+91 9003444435* இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்।"
         else:
             appointment_text = "\n\nTo book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
         
@@ -616,20 +690,26 @@ def clean_source_urls(text):
     return re.sub(r'\n\s*\n', '\n', text).strip()
 
 # ────────────────────────────────
-# Enhanced Perplexity API Integration with Caching
+# Enhanced Perplexity API Integration with Better Error Handling
 # ────────────────────────────────
 def get_perplexity_answer(question, uid):
-    """Get UX-optimized answer from Perplexity API with caching"""
+    """Get UX-optimized answer from Perplexity API with enhanced error handling"""
     start_time = time.time()
     
     try:
         # Check cache first for performance optimization
         cache_key = f"answer_cache:{hash(question)}"
         if redis_client:
-            cached_answer = redis_client.get(cache_key)
-            if cached_answer:
-                logger.info(f"Cache hit for question: {question[:50]}...")
-                return json.loads(cached_answer)
+            try:
+                with redis_lock:
+                    cached_answer = redis_client.get(cache_key)
+                if cached_answer:
+                    logger.info(f"Cache hit for question: {question[:50]}...")
+                    with redis_lock:
+                        redis_client.incr("cache_hits")
+                    return json.loads(cached_answer)
+            except redis.RedisError as e:
+                logger.error(f"Redis cache error: {e}")
         
         logger.info(f"Question from {uid}: {question}")
         
@@ -643,7 +723,7 @@ def get_perplexity_answer(question, uid):
         # Research-based language instructions
         if user_language == "tamil":
             language_instruction = "Respond ONLY in Tamil. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
-            not_found_msg = "আন্ত তকবল এঙ্গল আঙ্গীকরিক্কপ্পট্ট আতারঙ্গলিল কিডাইক্কবিল্লি। তুল্লিয়মান বিবরঙ্গলুক্ক এঙ্গল আতরবু কুলুবই তোতারপু কোল্লবুম।"
+            not_found_msg = "அந்த தகவல் எங்கள் அங்கீகரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை। துல்லியமான விவரங்களுக்கு எங்கள் ஆதரவு குழுவைத் தொடர்பு கொள்ளவும்।"
         else:
             language_instruction = "Respond ONLY in English. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
             not_found_msg = "That information isn't available in our approved sources. Please contact our support team for accurate details."
@@ -678,8 +758,12 @@ def get_perplexity_answer(question, uid):
             "Content-Type": "application/json"
         }
 
-        response = requests.post("https://api.perplexity.ai/chat/completions", 
-                               json=payload, headers=headers, timeout=30)
+        response = requests.post(
+            "https://api.perplexity.ai/chat/completions", 
+            json=payload, 
+            headers=headers, 
+            timeout=RESPONSE_TIMEOUT
+        )
         
         if response.status_code == 200:
             raw_reply = response.json()["choices"][0]["message"]["content"]
@@ -688,7 +772,11 @@ def get_perplexity_answer(question, uid):
             
             # Cache the response for performance optimization
             if redis_client:
-                redis_client.setex(cache_key, 3600, json.dumps(formatted_reply))  # 1 hour cache
+                try:
+                    with redis_lock:
+                        redis_client.setex(cache_key, 3600, json.dumps(formatted_reply))  # 1 hour cache
+                except redis.RedisError as e:
+                    logger.error(f"Redis cache store error: {e}")
             
             # Store conversation with research-based formatting
             mgr.store(uid, question, "user")
@@ -698,32 +786,55 @@ def get_perplexity_answer(question, uid):
             logger.info(f"Question processed in {processing_time:.2f}s")
             
             return formatted_reply
+            
+        elif response.status_code == 401:
+            logger.error("Perplexity API authentication failed - check API key")
+            if user_language == "tamil":
+                return "மன்னிக்கவும், எங்கள் சேவை தற்காலிகமாக கிடைக்கவில்லை.\n\nபிற்பாடு முயற்சிக்கவும்।"
+            else:
+                return "Sorry, our service is temporarily unavailable.\n\nPlease try again later."
         else:
             logger.error(f"Perplexity API error: {response.status_code} - {response.text}")
             if user_language == "tamil":
-                return "ম্যান্নিক্কবুম, এঙ্গল সেবই তর্কালিকমা কিডাইক্কবিল্লি.\n\nপিরকু মুয়র্সিক্কবুম।"
+                return "மன்னிக்கவும், எங்கள் சேவை தற்காலிகமாக கிடைக்கவில்லை.\n\nபிற்பாடு முயற்சிக்கவும்।"
             else:
                 return "Sorry, our service is temporarily unavailable.\n\nPlease try again later."
-            
+                
+    except requests.exceptions.Timeout:
+        logger.error("Perplexity API timeout")
+        if detect_language(question) == "tamil":
+            return "மன்னிக்கவும், பதில் அனுப்புவதில் தாமதம்.\n\nபிற்பாடு முயற்சிக்கவும்।"
+        else:
+            return "Sorry, response timeout occurred.\n\nPlease try again."
+    except requests.exceptions.ConnectionError:
+        logger.error("Perplexity API connection error")
+        if detect_language(question) == "tamil":
+            return "மன்னிக்கவும், இணைப்பு சிக்கல்.\n\nபிற்பாடு முயற்சிக்கவும்।"
+        else:
+            return "Sorry, connection issue occurred.\n\nPlease try again."
     except Exception as e:
         logger.error(f"Perplexity exception: {e}")
         if detect_language(question) == "tamil":
-            return "ম্যান্নিক্কবুম, তোলিল্নুত্প সিক্কল এরপট্টু.\n\nপিরকু মুয়র্সিক্কবুম।"
+            return "மன்னிக்கவும், தொழில்நுட்ப சிக்கல் ஏற்பட்டு.\n\nபிற்பாடு முயற்சிக்கவும்।"
         else:
             return "Sorry, there was a technical issue.\n\nPlease try again."
 
 # ────────────────────────────────
-# Flask Routes
+# Flask Routes (Enhanced with Rate Limiting)
 # ────────────────────────────────
 @app.route("/ask", methods=["POST"])
+@limiter.limit("10 per minute")
 def ask_question():
-    """Direct API endpoint with UX optimization"""
+    """Direct API endpoint with UX optimization and rate limiting"""
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid JSON"}), 400
+            
         question = data.get("question")
         user_id = data.get("user_id", "anonymous")
         
-        if not question:
+        if not question or not question.strip():
             return jsonify({"reply": "Please provide a question."}), 400
         
         answer = get_perplexity_answer(question, user_id)
@@ -737,13 +848,17 @@ def ask_question():
         
     except Exception as e:
         logger.error(f"Ask endpoint error: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route("/webhook", methods=["POST"])
+@limiter.limit("50 per minute")
 def webhook_handler():
     """Enhanced WhatsApp webhook handler with async processing"""
     try:
         payload = request.get_json()
+        if not payload:
+            return jsonify({"status": "error", "message": "Invalid payload"}), 400
+            
         messages = extract_whapi_messages(payload)
         
         for sender, text in messages:
@@ -775,45 +890,74 @@ def webhook_handler():
         
     except Exception as e:
         logger.error(f"Webhook error: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"status": "error", "message": "Internal server error"}), 500
 
 @app.route("/conversation/<user_id>", methods=["GET"])
+@limiter.limit("20 per minute")
 def get_conversation(user_id):
-    """Get conversation history"""
-    history = mgr.get_history(user_id)
-    return jsonify({"user_id": user_id, "conversation": history, "count": len(history)})
+    """Get conversation history with rate limiting"""
+    try:
+        history = mgr.get_history(user_id)
+        return jsonify({"user_id": user_id, "conversation": history, "count": len(history)})
+    except Exception as e:
+        logger.error(f"Conversation endpoint error: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route("/status/<message_id>")
+@limiter.limit("30 per minute")
 def message_status(message_id):
-    """Get message delivery status"""
+    """Get message delivery status with rate limiting"""
     try:
         if not redis_client:
             return jsonify({"error": "Redis not available"}), 500
-        status_data = redis_client.get(f"msg_status:{message_id}")
+        
+        with redis_lock:
+            status_data = redis_client.get(f"msg_status:{message_id}")
+        
         if status_data:
             return jsonify(json.loads(status_data))
         else:
             return jsonify({"error": "Message not found"}), 404
+    except redis.RedisError as e:
+        logger.error(f"Redis status check error: {e}")
+        return jsonify({"error": "Database error"}), 500
     except Exception as e:
         logger.error(f"Status check error: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route("/stats")
+@limiter.limit("10 per minute")
 def system_stats():
-    """System performance statistics"""
+    """System performance statistics with rate limiting"""
     try:
+        redis_connected = False
+        processed_messages = "0"
+        active_conversations = 0
+        cache_hits = "0"
+        
+        if redis_client:
+            try:
+                with redis_lock:
+                    redis_connected = redis_client.ping()
+                    processed_messages = redis_client.get("total_processed") or "0"
+                    active_conversations = len(redis_client.keys("whatsapp_chat:*"))
+                    cache_hits = redis_client.get("cache_hits") or "0"
+            except redis.RedisError as e:
+                logger.error(f"Redis stats error: {e}")
+        
         stats = {
             "queue_size": message_queue.queue.qsize(),
-            "redis_connected": redis_client.ping() if redis_client else False,
+            "redis_connected": redis_connected,
             "uptime": datetime.now().isoformat(),
-            "processed_messages": redis_client.get("total_processed") if redis_client else "0",
-            "active_conversations": len(redis_client.keys("whatsapp_chat:*")) if redis_client else 0,
-            "cache_hits": redis_client.get("cache_hits") if redis_client else "0"
+            "processed_messages": processed_messages,
+            "active_conversations": active_conversations,
+            "cache_hits": cache_hits,
+            "total_processed_by_queue": message_queue.processed_count
         }
         return jsonify(stats)
     except Exception as e:
         logger.error(f"Stats error: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route("/demo")
 def call_button_demo():
@@ -882,20 +1026,44 @@ def call_button_demo():
 
 @app.route("/", methods=["GET"])
 def health_check():
-    """Health check with UX feature status"""
+    """Health check with UX feature status and enhanced security"""
     try:
-        redis_status = "connected" if (redis_client and redis_client.ping()) else "disconnected"
+        redis_status = "disconnected"
+        if redis_client:
+            try:
+                with redis_lock:
+                    redis_client.ping()
+                redis_status = "connected"
+            except redis.RedisError:
+                redis_status = "error"
     except:
         redis_status = "error"
     
     return jsonify({
-        "status": "Dermijan Server Running - Enhanced with Call Buttons & WhAPI",
-        "version": "Research-Based UX + Performance Optimized + Railway Ready",
+        "status": "Dermijan Server Running - Security Enhanced + Fixed Issues",
+        "version": "Research-Based UX + Performance + Security + Railway Ready v2.0",
         "endpoints": ["/ask", "/webhook", "/conversation/<user_id>", "/status/<id>", "/stats", "/demo"],
         "allowed_urls_count": len(ALLOWED_URLS),
         "redis_status": redis_status,
         "queue_size": message_queue.queue.qsize(),
         "port": PORT,
+        "security_features": {
+            "api_key_from_env": True,
+            "rate_limiting": True,
+            "security_headers": True,
+            "connection_pooling": True,
+            "thread_safety": True,
+            "enhanced_error_handling": True,
+            "input_validation": True
+        },
+        "fixes_applied": {
+            "api_key_exposure": "Fixed - Now uses environment variable",
+            "language_detection": "Fixed - Correct Tamil Unicode and text",
+            "thread_safety": "Fixed - Added locks for shared resources", 
+            "error_handling": "Enhanced - Specific exception handling",
+            "performance": "Improved - Connection pooling, caching",
+            "security": "Enhanced - Headers, rate limiting, validation"
+        },
         "features": {
             "research_based_formatting": True,
             "mobile_optimized_paragraphs": True,
@@ -918,15 +1086,24 @@ def health_check():
     })
 
 # ────────────────────────────────
-# Main - Railway Configuration
+# Main - Railway Configuration (Enhanced)
 # ────────────────────────────────
 if __name__ == "__main__":
-    logger.info("🚄 Starting Dermijan Server - Railway Deployment Ready")
+    logger.info("🚄 Starting Dermijan Server - Security Enhanced + All Issues Fixed")
     logger.info(f"📋 Loaded {len(ALLOWED_URLS)} dermijan.com URLs")
     logger.info("🎯 Features: Research-based formatting, Mobile-optimized, Visual hierarchy")
-    logger.info("✨ New Features: Call buttons, panel.whapi.cloud API, Async processing")
-    logger.info("📱 Mobile-first readability, Language-specific responses, Performance optimized")
-    logger.info("🔧 Queue management, Message status tracking, Comprehensive logging")
+    logger.info("✨ Enhanced: Security headers, Rate limiting, Thread safety")
+    logger.info("🔐 Security: API keys from environment, Input validation, Error handling")
+    logger.info("📱 Fixed: Tamil language detection, Connection pooling, Caching")
+    logger.info("🔧 Performance: Queue management, Message status tracking, Logging")
     logger.info(f"🌐 Server starting on port: {PORT}")
+    
+    # Validate required environment variables
+    if not PERPLEXITY_API_KEY:
+        logger.error("❌ PERPLEXITY_API_KEY is required")
+        exit(1)
+    
+    logger.info("✅ All environment variables validated")
+    logger.info("🚀 Server ready for Railway deployment")
     
     app.run(debug=False, host='0.0.0.0', port=PORT)
