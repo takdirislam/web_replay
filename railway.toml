@@ -1,11 +1,11 @@
-[build]
-builder = "HEROKU"
+[phases.setup]
+nixPkgs = ["python39"]
 
-[build.buildCommand]
-command = "pip install flask redis requests gunicorn"
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
 
-[deploy]
-startCommand = "python rail_main.py"
-healthcheckPath = "/"
-healthcheckTimeout = 100
-restartPolicyType = "ON_FAILURE"
+[phases.build]
+cmds = ["echo 'Build complete'"]
+
+[start]
+cmd = "python app.py"

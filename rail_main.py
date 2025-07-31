@@ -1,14 +1,4 @@
-"""
-Dermijan Chatbot - Research-Based UX Optimized Version
-Version: 2025-07-29 UX Enhanced with panel.whapi.cloud
-Features:
-• Research-backed text formatting for maximum readability
-• Optimized paragraph structure for mobile users
-• Strategic use of dots and hyphens for better scanning
-• Visual hierarchy implementation
-• WhatsApp-specific user experience patterns
-• Call Now Button with panel.whapi.cloud API
-"""
+
 
 from flask import Flask, request, jsonify
 from datetime import datetime
@@ -19,17 +9,12 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 # ────────────────────────────────
-# API Configuration - panel.whapi.cloud
+# API Configuration
 # ────────────────────────────────
-PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "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")
-
-# panel.whapi.cloud Configuration
-WHAPI_BASE_URL = "https://gate.whapi.cloud"
-WHAPI_TOKEN = os.getenv("WHAPI_TOKEN", "YOUR_WHAPI_TOKEN_HERE")
-WHAPI_HEADERS = {
-    "Authorization": f"Bearer {WHAPI_TOKEN}",
-    "Content-Type": "application/json"
-}
+PERPLEXITY_API_KEY = "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"
+WASENDER_API_TOKEN = "qWfqpscn7vXkC3saOP6k2ZphQRpvCHvG"
+WASENDER_SESSION = "TAKDIR"
+WASENDER_API_URL = "https://gate.whapi.cloud/"
 
 # ────────────────────────────────
 # Dermijan URLs (unchanged)
@@ -252,7 +237,7 @@ def detect_appointment_request(text):
     """Enhanced appointment detection based on user behavior research"""
     english_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 
                        'meet', 'appoint', 'booking', 'reserve', 'arrange']
-    tamil_keywords = ['அப்பாய்ன்ட்மென்ட்', 'புக்', 'சந்திப்பு', 'வருகை', 'நேரம்']
+    tamil_keywords = ['அப்பாய்ன்ட்மென்ট்', 'புக்', 'சந்திப்பு', 'வருகை', 'நேரம்']
     
     text_lower = text.lower()
     return (any(keyword in text_lower for keyword in english_keywords) or
@@ -332,7 +317,7 @@ def get_perplexity_answer(question, uid):
     # Research-based language instructions
     if user_language == "tamil":
         language_instruction = "Respond ONLY in Tamil. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
-        not_found_msg = "அந்த தகவல் எங்கள் அங்கீகரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை. துல்லியமான விவரங்களுக்கு எங்கள் ஆதரவு குழுவை தொடர்பு கொள்ளவும்."
+        not_found_msg = "அந்த தகவல் எங்கள் அங்கீকரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை. துல்லியமான விவரங்களுக்கு எங்கள் ஆதரவு குழுவை தொடர்பு கொள்ளவும்."
     else:
         language_instruction = "Respond ONLY in English. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
         not_found_msg = "That information isn't available in our approved sources. Please contact our support team for accurate details."
@@ -396,124 +381,55 @@ def get_perplexity_answer(question, uid):
             return "Sorry, there was a technical issue.\n\nPlease try again."
 
 # ────────────────────────────────
-# panel.whapi.cloud Functions
+# WASender Functions (unchanged)
 # ────────────────────────────────
-def extract_whapi_messages(payload):
-    """Extract messages and button clicks from panel.whapi.cloud webhook"""
+def extract_wasender_messages(payload):
+    """Extract messages from WASender webhook"""
     messages = []
-    button_clicks = []
-    
     try:
-        if payload.get("event") == "message":
-            data = payload.get("data", {})
-            sender = data.get("from", "").replace("@s.whatsapp.net", "")
+        if payload.get("event") == "messages.upsert":
+            data = payload.get("data", {}).get("messages", {})
+            sender = data.get("key", {}).get("remoteJid", "").replace("@s.whatsapp.net", "").replace("+", "")
             
-            # Check for button response
-            if data.get("type") == "interactive":
-                interactive = data.get("interactive", {})
-                if interactive.get("type") == "button_reply":
-                    button_id = interactive.get("button_reply", {}).get("id", "")
-                    if button_id and sender:
-                        button_clicks.append((sender, button_id))
-                        print(f"Button clicked: {button_id} by {sender}")
+            message_content = data.get("message", {})
+            text = ""
+            if "conversation" in message_content:
+                text = message_content["conversation"]
+            elif "extendedTextMessage" in message_content:
+                text = message_content["extendedTextMessage"].get("text", "")
             
-            # Check for regular text messages
-            elif data.get("type") == "text":
-                text = data.get("text", {}).get("body", "")
-                if sender and text:
-                    messages.append((sender, text))
-                    
+            if sender and text:
+                messages.append((sender, text))
+                
     except Exception as e:
         print(f"Message extraction error: {e}")
     
-    return messages, button_clicks
+    return messages
 
-def send_whapi_reply(to_phone, message):
-    """Send UX-optimized reply with Call Now button via panel.whapi.cloud"""
-    if not WHAPI_TOKEN or WHAPI_TOKEN == "YOUR_WHAPI_TOKEN_HERE":
-        print("WhAPI token missing")
+def send_wasender_reply(to_phone, message):
+    """Send UX-optimized reply via WASender API"""
+    if not WASENDER_API_TOKEN:
+        print("WASender API token missing")
         return False
     
-    # Prepare phone number
-    phone = to_phone.replace("+", "").replace("@s.whatsapp.net", "")
-    if not phone.startswith("91"):
-        phone = f"91{phone}"
-    
-    # Create message with Call Now button
     payload = {
-        "typing_time": 0,
-        "to": phone,
-        "type": "interactive",
-        "interactive": {
-            "type": "button",
-            "body": {
-                "text": message
-            },
-            "action": {
-                "buttons": [
-                    {
-                        "type": "reply",
-                        "reply": {
-                            "id": "call_now_btn",
-                            "title": "📞 Call Now"
-                        }
-                    }
-                ]
-            }
-        }
+        "session": WASENDER_SESSION,
+        "to": to_phone,
+        "text": message
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {WASENDER_API_TOKEN}",
+        "Content-Type": "application/json"
     }
     
     try:
-        # Try sending with button first
-        response = requests.post(f"{WHAPI_BASE_URL}/messages", 
-                               json=payload, headers=WHAPI_HEADERS, timeout=30)
-        
-        if response.status_code == 200:
-            print("Message with Call Now button sent successfully")
-            return True
-        else:
-            print(f"Button send failed: {response.status_code}, trying simple text...")
-            # Fallback to simple text if button doesn't work
-            simple_payload = {
-                "typing_time": 0,
-                "to": phone,
-                "type": "text",
-                "text": {"body": f"{message}\n\n📞 *Call us now at: +91 9003444435*"}
-            }
-            
-            fallback_response = requests.post(f"{WHAPI_BASE_URL}/messages", 
-                                            json=simple_payload, headers=WHAPI_HEADERS, timeout=30)
-            success = fallback_response.status_code == 200
-            print("Simple message sent successfully" if success else f"Send error: {fallback_response.status_code}")
-            return success
-            
+        response = requests.post(WASENDER_API_URL, json=payload, headers=headers)
+        success = response.status_code in [200, 201]
+        print("Message sent successfully" if success else f"Send error: {response.status_code}")
+        return success
     except Exception as e:
         print(f"Send error: {e}")
-        return False
-
-def handle_button_click(button_id, sender):
-    """Handle Call Now button clicks"""
-    try:
-        if button_id == "call_now_btn":
-            # Send call instruction message
-            call_message = """📞 *Direct Call Instructions*
-
-Click the number below to call directly:
-*+91 9003444435*
-
-Or use your phone dialer to call:
-+91 9003444435
-
-🏥 *Dermijan Clinic*
-📍 Chennai
-⏰ Available for consultations
-
-Our team is ready to assist you with your skin, hair, and body care needs!"""
-            
-            send_whapi_reply(sender, call_message)
-            return True
-    except Exception as e:
-        print(f"Button click handler error: {e}")
         return False
 
 # ────────────────────────────────
@@ -534,29 +450,21 @@ def ask_question():
 
 @app.route("/webhook", methods=["POST"])
 def webhook_handler():
-    """WhatsApp webhook handler with button support and UX optimization"""
+    """WhatsApp webhook handler with UX optimization"""
     try:
         payload = request.get_json()
-        messages, button_clicks = extract_whapi_messages(payload)
+        messages = extract_wasender_messages(payload)
         
-        # Handle button clicks first
-        for sender, button_id in button_clicks:
-            print(f"Processing button click: {button_id} from {sender}")
-            handle_button_click(button_id, sender)
-        
-        # Handle regular messages
         for sender, text in messages:
             # Skip bot messages to prevent loops
-            skip_phrases = ["Sources:", "dermijan.com", "isn't available in our approved sources", 
-                          "Direct Call Instructions", "Our team is ready to assist"]
+            skip_phrases = ["Sources:", "dermijan.com", "isn't available in our approved sources"]
             if any(phrase.lower() in text.lower() for phrase in skip_phrases):
                 continue
             
-            print(f"Processing message from {sender}: {text}")
             answer = get_perplexity_answer(text, sender)
-            send_whapi_reply(sender, answer)
+            send_wasender_reply(sender, answer)
         
-        return jsonify({"status": "success", "processed_messages": len(messages), "button_clicks": len(button_clicks)})
+        return jsonify({"status": "success"})
         
     except Exception as e:
         print(f"Webhook error: {e}")
@@ -568,56 +476,20 @@ def get_conversation(user_id):
     history = mgr.get_history(user_id)
     return jsonify({"user_id": user_id, "conversation": history, "count": len(history)})
 
-@app.route("/test-button", methods=["POST"])
-def test_button():
-    """Test Call Now button functionality"""
-    data = request.get_json()
-    phone = data.get("phone")
-    
-    if not phone:
-        return jsonify({"error": "Phone number required"}), 400
-    
-    test_message = """🏥 *Welcome to Dermijan Clinic*
-
-Thank you for your interest in our services!
-
-This is a test message with Call Now button. Click the button below to call us directly.
-
-📍 *Location:* Chennai  
-📧 *Email:* dermijanofficialcontact@gmail.com"""
-    
-    success = send_whapi_reply(phone, test_message)
-    
-    return jsonify({
-        "status": "success" if success else "failed",
-        "message": "Test message with Call Now button sent" if success else "Failed to send message"
-    })
-
 @app.route("/", methods=["GET"])
 def health_check():
-    """Health check with UX feature status and Call Now button info"""
+    """Health check with UX feature status"""
     try:
         redis_status = "connected" if redis_client.ping() else "disconnected"
     except:
         redis_status = "error"
     
     return jsonify({
-        "status": "Dermijan Server Running - UX Optimized with Call Now Button (panel.whapi.cloud)",
-        "version": "Research-Based User Experience Enhanced + Call Now Button + WhAPI",
-        "endpoints": ["/ask", "/webhook", "/conversation/<user_id>", "/test-button"],
+        "status": "Dermijan Server Running - UX Optimized",
+        "version": "Research-Based User Experience Enhanced",
+        "endpoints": ["/ask", "/webhook", "/conversation/<user_id>"],
         "allowed_urls_count": len(ALLOWED_URLS),
         "redis_status": redis_status,
-        "whapi_integration": {
-            "base_url": WHAPI_BASE_URL,
-            "token_configured": WHAPI_TOKEN != "YOUR_WHAPI_TOKEN_HERE"
-        },
-        "call_feature": {
-            "call_now_button": True,
-            "phone_number": "+91 9003444435",
-            "button_click_handling": True,
-            "fallback_support": True,
-            "api_provider": "panel.whapi.cloud"
-        },
         "ux_features": {
             "research_based_formatting": True,
             "mobile_optimized_paragraphs": True,
@@ -626,8 +498,7 @@ def health_check():
             "visual_hierarchy_implemented": True,
             "accessibility_compliant": True,
             "whatsapp_pattern_optimized": True,
-            "scanning_friendly_layout": True,
-            "call_to_action_buttons": True
+            "scanning_friendly_layout": True
         }
     })
 
@@ -635,10 +506,9 @@ def health_check():
 # Main
 # ────────────────────────────────
 if __name__ == "__main__":
-    print("🚀 Starting Dermijan Server - UX Research Enhanced with panel.whapi.cloud")
+    print("🚀 Starting Dermijan Server - UX Research Enhanced")
     print(f"📋 Loaded {len(ALLOWED_URLS)} dermijan.com URLs")
     print("🎯 Features: Research-based formatting, Mobile-optimized, Visual hierarchy")
     print("✨ UX Enhancements: Short paragraphs, Strategic dots/hyphens, Scannable layout")
     print("📱 Mobile-first readability, Language-specific responses, Accessibility compliant")
-    print("🔌 API Integration: panel.whapi.cloud with Call Now button")
     app.run(debug=True, host='0.0.0.0', port=8000)
