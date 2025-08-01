@@ -392,46 +392,31 @@ def extract_waha_messages(payload):
     try:
         print(f"🔍 WAHA webhook received: {json.dumps(payload, indent=2)}")
         
-        # Handle the actual WAHA payload structure
-        if payload.get("event") == "message":
-            # WAHA sends message data in "payload" not "data"
-            data = payload.get("payload", {})
+        # Handle the ACTUAL webhook structure from your log
+        if payload.get("event") == "message_create":
+            # Navigate to the actual message data
+            data = payload.get("data", {}).get("_data", {})
             
-            # Extract sender - remove @c.us suffix
+            # Extract sender from id.remote
             sender = ""
-            if "from" in data:
-                sender = data["from"].replace("@c.us", "").replace("@s.whatsapp.net", "")
+            if "id" in data and "remote" in data["id"]:
+                sender = data["id"]["remote"].replace("@c.us", "").replace("@s.whatsapp.net", "")
                 # Remove country code for Bangladesh numbers
                 if sender.startswith("880"):
                     sender = sender[3:]  # Remove 880 prefix
             
-            # Extract message text from different possible fields
+            # Extract message text from body
             text = ""
             if "body" in data:
                 text = data["body"]
-            elif "text" in data:
-                text = data["text"]
-            elif "message" in data:
-                # Sometimes message content is nested
-                msg_content = data["message"]
-                if isinstance(msg_content, dict):
-                    if "conversation" in msg_content:
-                        text = msg_content["conversation"]
-                    elif "extendedTextMessage" in msg_content:
-                        text = msg_content["extendedTextMessage"].get("text", "")
-                else:
-                    text = str(msg_content)
             
             if sender and text:
                 messages.append((sender, text))
                 print(f"✅ Message extracted - Sender: {sender}, Text: {text}")
             else:
                 print(f"❌ Failed extraction - Sender: {sender}, Text: {text}")
-                print(f"Available keys in payload: {list(data.keys())}")
+                print(f"Available keys in _data: {list(data.keys())}")
                 
-                # Debug: Show what's in the payload
-                for key, value in data.items():
-                    print(f"  {key}: {value}")
         else:
             print(f"ℹ️ Ignoring event type: {payload.get('event')}")
                 
@@ -440,6 +425,7 @@ def extract_waha_messages(payload):
         print(f"Full payload: {payload}")
     
     return messages
+
 
 def send_waha_reply(to_phone, message):
     """Enhanced WAHA send with connection retry and fallback"""
