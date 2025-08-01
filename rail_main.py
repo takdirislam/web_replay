@@ -7,12 +7,17 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 # ────────────────────────────────
-# API Configuration - LOCALHOST WAHA
+# API Configuration - DYNAMIC WAHA URL
 # ────────────────────────────────
 PERPLEXITY_API_KEY = "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"
-WAHA_BASE_URL = "http://localhost:3000"  # Changed to localhost
-WAHA_SESSION = "WAHA"
+
+# Dynamic WAHA URL - Environment variable দিয়ে control করা হবে
+WAHA_BASE_URL = os.getenv("WAHA_BASE_URL", "http://localhost:3000")
+WAHA_SESSION = os.getenv("WAHA_SESSION", "WAHA")
 WAHA_SEND_TEXT_URL = f"{WAHA_BASE_URL}/api/sendText"
+
+# Debug info
+print(f"🔗 WAHA Configuration: {WAHA_BASE_URL} (Session: {WAHA_SESSION})")
 
 # ────────────────────────────────
 # Dermijan URLs (unchanged)
@@ -152,7 +157,7 @@ CONVERSATION RULES:
 
 Language-Specific Contact Information:
 - English: "To book an appointment, please call us at +91 9003444435 and our contact team will get in touch with you shortly."
-- Tamil: "அப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
+- Tamil: "அப்பாய்ன்ட்மென்ট் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விরைவில் உங்களை தொடর்பு கொள்ளும்।"
 
 Remember: Apply research-backed formatting consistently. Every response should be scannable, mobile-friendly, and follow proven UX patterns."""
 
@@ -235,7 +240,7 @@ def detect_appointment_request(text):
     """Enhanced appointment detection based on user behavior research"""
     english_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 
                        'meet', 'appoint', 'booking', 'reserve', 'arrange']
-    tamil_keywords = ['அப்பாய்ன்ட்மென்ட்', 'புக்', 'சந்திப்பு', 'வருகை', 'நேரம்']
+    tamil_keywords = ['அப்பாய்ன্ট্মেন্ট্', 'পুক্', 'சந্திप্পু', 'বরুকৈ', 'নেরম্']
     
     text_lower = text.lower()
     return (any(keyword in text_lower for keyword in english_keywords) or
@@ -274,7 +279,7 @@ def apply_research_based_formatting(text, user_question):
     # Add appointment info based on UX research on call-to-action placement
     if detect_appointment_request(user_question):
         if user_language == "tamil":
-            appointment_text = "\n\nஅப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
+            appointment_text = "\n\nअप्पायन्ट्मेन्ट् পুক্ সেয়য, তযবুসেয়তু এল্লালে +91 9003444435 ইল অলয়ক্কবুল, এল্লাল তোদর্পু কুজু বিরেবিল উল্লালৈ তোদর্পু কোল্লুম্।"
         else:
             appointment_text = "\n\nTo book an appointment, please call us at +91 9003444435 and our contact team will get in touch with you shortly."
         
@@ -315,7 +320,7 @@ def get_perplexity_answer(question, uid):
     # Research-based language instructions
     if user_language == "tamil":
         language_instruction = "Respond ONLY in Tamil. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
-        not_found_msg = "அந்த தகவல் எங்கள் அங்கீகரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை। துல்லியமான விவரங்களுக்கு எங்கள் ஆதரவு குழுவை தொடர்பு கொள்ளவும்."
+        not_found_msg = "அন্ত তকবল এল্লাল অল্লীকরিক্কপ্পট্ট আতারল্লালিল কিদাইক্কবিল্লাই। তুল্লিযমান বিবরল্লালুক্ক এল্লাল আতরবু কুজুবৈ তোদর্পু কোল্লবুম্।"
     else:
         language_instruction = "Respond ONLY in English. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
         not_found_msg = "That information isn't available in our approved sources. Please contact our support team for accurate details."
@@ -367,19 +372,19 @@ def get_perplexity_answer(question, uid):
         else:
             print(f"Perplexity API error: {response.status_code} - {response.text}")
             if user_language == "tamil":
-                return "மன்னிக்கவும், எங்கள் சேவை தற்காலிகமாக கிடைக்கவில்லை.\n\nபிறகு முயற்சிக்கவும்."
+                return "মন্নিক্কবুম্, এল্লাল সেবৈ তর্কালিকমাক কিদাইক্কবিল্লাই.\n\nপিরকু মুযরসিক্কবুম্।"
             else:
                 return "Sorry, our service is temporarily unavailable.\n\nPlease try again later."
             
     except Exception as e:
         print(f"Perplexity exception: {e}")
         if user_language == "tamil":
-            return "மன்னிக்கவும், தொழில்நுட்ப சிக்கல் ஏற்பட்டது.\n\nபிறகு முயற்சிக்கவும்."
+            return "মন্নিক্কবুম্, তোজিল্নুটপ সিক্কল এরপট্টতু.\n\nপিরকু মুযরসিক্কবুম্।"
         else:
             return "Sorry, there was a technical issue.\n\nPlease try again."
 
 # ────────────────────────────────
-# WAHA Functions - IMPROVED VERSION
+# WAHA Functions - ENHANCED WITH CONNECTION RECOVERY
 # ────────────────────────────────
 def extract_waha_messages(payload):
     """Extract messages from WAHA webhook - FIXED FOR ACTUAL PAYLOAD STRUCTURE"""
@@ -436,9 +441,8 @@ def extract_waha_messages(payload):
     
     return messages
 
-
 def send_waha_reply(to_phone, message):
-    """Send message via WAHA localhost - IMPROVED VERSION"""
+    """Enhanced WAHA send with connection retry and fallback"""
     if not WAHA_BASE_URL:
         print("❌ WAHA Base URL missing")
         return False
@@ -450,7 +454,7 @@ def send_waha_reply(to_phone, message):
     if not clean_phone.startswith('880'):
         clean_phone = '880' + clean_phone
     
-    # WAHA format: phone@c.us[21]
+    # WAHA format: phone@c.us
     chat_id = f"{clean_phone}@c.us"
     
     payload = {
@@ -461,28 +465,63 @@ def send_waha_reply(to_phone, message):
     
     headers = {"Content-Type": "application/json"}
     
-    try:
-        print(f"📤 Sending to: {chat_id}")
-        print(f"📝 Message: {message[:100]}...")
-        print(f"🔗 URL: {WAHA_SEND_TEXT_URL}")
-        
-        response = requests.post(WAHA_SEND_TEXT_URL, json=payload, headers=headers, timeout=30)
-        
-        print(f"📊 Response: {response.status_code}")
-        print(f"📄 Body: {response.text}")
-        
-        success = response.status_code in [200, 201]
-        
-        if success:
-            print("✅ WAHA localhost message sent successfully")
-        else:
-            print(f"❌ Send failed: {response.status_code} - {response.text}")
+    # Retry mechanism with multiple attempts
+    max_retries = 3
+    retry_delay = [1, 2, 3]  # seconds
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"📤 Attempt {attempt + 1}/{max_retries} - Sending to: {chat_id}")
+            print(f"📝 Message: {message[:100]}...")
+            print(f"🔗 URL: {WAHA_SEND_TEXT_URL}")
             
-        return success
-        
-    except Exception as e:
-        print(f"❌ Send exception: {e}")
-        return False
+            response = requests.post(
+                WAHA_SEND_TEXT_URL, 
+                json=payload, 
+                headers=headers, 
+                timeout=30
+            )
+            
+            print(f"📊 Response: {response.status_code}")
+            print(f"📄 Body: {response.text}")
+            
+            success = response.status_code in [200, 201]
+            
+            if success:
+                print("✅ WAHA message sent successfully")
+                return True
+            else:
+                print(f"❌ Send failed: {response.status_code} - {response.text}")
+                if attempt < max_retries - 1:
+                    print(f"⏳ Retrying in {retry_delay[attempt]} seconds...")
+                    import time
+                    time.sleep(retry_delay[attempt])
+                    continue
+                
+        except requests.exceptions.ConnectionError as e:
+            print(f"❌ Connection error on attempt {attempt + 1}: {e}")
+            if "Connection refused" in str(e):
+                print("🔍 WAHA server seems to be down or unreachable")
+                print("💡 Solutions:")
+                print("   1. Check if WAHA is running on the specified URL")
+                print("   2. For localhost: Use ngrok to expose WAHA")
+                print("   3. Update WAHA_BASE_URL environment variable")
+                
+            if attempt < max_retries - 1:
+                print(f"⏳ Retrying in {retry_delay[attempt]} seconds...")
+                import time
+                time.sleep(retry_delay[attempt])
+                continue
+        except Exception as e:
+            print(f"❌ Send exception on attempt {attempt + 1}: {e}")
+            if attempt < max_retries - 1:
+                print(f"⏳ Retrying in {retry_delay[attempt]} seconds...")
+                import time
+                time.sleep(retry_delay[attempt])
+                continue
+    
+    print("❌ All retry attempts failed")
+    return False
 
 # ────────────────────────────────
 # Flask Routes
@@ -502,7 +541,7 @@ def ask_question():
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook_handler():
-    """Enhanced webhook handler for WAHA localhost"""
+    """Enhanced webhook handler with improved error handling"""
     if request.method == "GET":
         # WAHA webhook verification
         return jsonify({"status": "webhook_ready", "timestamp": datetime.now().isoformat()})
@@ -511,7 +550,7 @@ def webhook_handler():
         payload = request.get_json()
         
         print("🔔" + "="*60)
-        print("WAHA LOCALHOST WEBHOOK RECEIVED")
+        print("WAHA WEBHOOK RECEIVED")
         print(f"Headers: {dict(request.headers)}")
         print(f"Method: {request.method}")
         print(f"Payload: {json.dumps(payload, indent=2)}")
@@ -525,7 +564,7 @@ def webhook_handler():
             
             # Skip bot messages to prevent loops
             skip_phrases = ["sorry, our service", "মন্নিক্কবুম্", "dermijan.com", 
-                           "temporarily unavailable", "technical issue"]
+                           "temporarily unavailable", "technical issue", "connection"]
             if any(phrase.lower() in text.lower() for phrase in skip_phrases):
                 print("⏭️ Skipping bot message")
                 continue
@@ -537,6 +576,9 @@ def webhook_handler():
             print("📤 Sending reply...")
             success = send_waha_reply(sender, answer)
             print(f"✅ Send result: {success}")
+            
+            if not success:
+                print("⚠️ Message send failed - check WAHA configuration")
         
         return jsonify({
             "status": "success", 
@@ -558,7 +600,7 @@ def get_conversation(user_id):
 
 @app.route("/waha-status", methods=["GET"])
 def check_waha_status():
-    """Check WAHA localhost server status"""
+    """Check WAHA server status with enhanced diagnostics"""
     try:
         # Check WAHA server health
         response = requests.get(f"{WAHA_BASE_URL}/api/sessions/{WAHA_SESSION}", timeout=10)
@@ -568,44 +610,63 @@ def check_waha_status():
                 "waha_status": "connected",
                 "session_status": session_data.get("status"),
                 "session_data": session_data,
-                "localhost_connection": True
+                "base_url": WAHA_BASE_URL,
+                "connection": "successful"
             })
         else:
             return jsonify({
                 "waha_status": "error",
                 "error_code": response.status_code,
                 "error_message": response.text,
-                "localhost_connection": False
+                "base_url": WAHA_BASE_URL,
+                "connection": "failed"
             }), 500
+    except requests.exceptions.ConnectionError as e:
+        return jsonify({
+            "waha_status": "connection_refused",
+            "error": str(e),
+            "base_url": WAHA_BASE_URL,
+            "connection": "refused",
+            "solutions": [
+                "Check if WAHA is running on the specified URL",
+                "For localhost: Use ngrok to expose WAHA publicly",
+                "Update WAHA_BASE_URL environment variable to public URL",
+                "Verify network connectivity"
+            ]
+        }), 500
     except Exception as e:
         return jsonify({
-            "waha_status": "connection_failed",
+            "waha_status": "unknown_error",
             "error": str(e),
-            "localhost_connection": False,
-            "suggestion": "Make sure WAHA is running on localhost:3000"
+            "base_url": WAHA_BASE_URL,
+            "connection": "unknown"
         }), 500
 
 @app.route("/test-send", methods=["POST"])
 def test_send_message():
-    """Test WAHA localhost message sending"""
+    """Test WAHA message sending with diagnostics"""
     data = request.get_json()
     phone = data.get("phone")
-    message = data.get("message", "Test message from Dermijan Bot via localhost WAHA")
+    message = data.get("message", "Test message from Dermijan Bot")
     
     if not phone:
         return jsonify({"error": "Phone number required"}), 400
     
+    print(f"🧪 Testing message send to {phone}")
     success = send_waha_reply(phone, message)
+    
     return jsonify({
         "success": success,
         "phone": phone,
         "message": message,
-        "waha_server": "localhost:3000"
+        "waha_server": WAHA_BASE_URL,
+        "session": WAHA_SESSION,
+        "recommendation": "If failed, check WAHA_BASE_URL environment variable" if not success else "Message sent successfully"
     })
 
 @app.route("/setup-waha-webhook", methods=["POST"])
 def setup_waha_webhook():
-    """Configure WAHA localhost session with webhook"""
+    """Configure WAHA session with webhook and enhanced error handling"""
     data = request.get_json() or {}
     webhook_url = data.get("webhook_url", "https://webreplay-production.up.railway.app/webhook")
     
@@ -638,27 +699,37 @@ def setup_waha_webhook():
             "status_code": response.status_code,
             "response": response.text,
             "webhook_configured": webhook_url,
-            "localhost_setup": True
+            "waha_server": WAHA_BASE_URL
         })
     
+    except requests.exceptions.ConnectionError as e:
+        return jsonify({
+            "error": "Cannot connect to WAHA server",
+            "details": str(e),
+            "waha_server": WAHA_BASE_URL,
+            "solutions": [
+                "Check if WAHA is running",
+                "Verify WAHA_BASE_URL is correct",
+                "Use ngrok if running localhost"
+            ]
+        }), 500
     except Exception as e:
         return jsonify({
             "error": str(e),
-            "localhost_setup": False,
-            "suggestion": "Make sure WAHA is running on localhost:3000"
+            "waha_server": WAHA_BASE_URL
         }), 500
 
 @app.route("/", methods=["GET"])
 def health_check():
-    """Health check with localhost WAHA configuration"""
+    """Enhanced health check with configuration details"""
     try:
         redis_status = "connected" if redis_client.ping() else "disconnected"
     except:
         redis_status = "error"
     
     return jsonify({
-        "status": "Dermijan Server Running - UX Optimized with LOCALHOST WAHA",
-        "version": "Research-Based User Experience Enhanced - WAHA Localhost Integration",
+        "status": "Dermijan Server Running - UX Optimized with DYNAMIC WAHA",
+        "version": "Research-Based User Experience Enhanced - Enhanced WAHA Integration",
         "endpoints": ["/ask", "/webhook", "/conversation/<user_id>", "/waha-status", "/test-send", "/setup-waha-webhook"],
         "allowed_urls_count": len(ALLOWED_URLS),
         "redis_status": redis_status,
@@ -666,7 +737,8 @@ def health_check():
             "base_url": WAHA_BASE_URL,
             "session": WAHA_SESSION,
             "send_endpoint": WAHA_SEND_TEXT_URL,
-            "localhost": True
+            "environment_controlled": True,
+            "connection_retry": True
         },
         "ux_features": {
             "research_based_formatting": True,
@@ -679,10 +751,22 @@ def health_check():
             "scanning_friendly_layout": True
         },
         "setup_instructions": {
-            "1": "Start WAHA: docker run -it --rm -p 3000:3000/tcp --name waha devlikeapro/waha",
-            "2": "Configure webhook: curl -X POST /setup-waha-webhook",
-            "3": "Test message: curl -X POST /test-send -d '{\"phone\":\"01712345678\"}'",
-            "4": "Check status: curl /waha-status"
+            "localhost": {
+                "1": "Start WAHA: docker run -it --rm -p 3000:3000/tcp --name waha devlikeapro/waha",
+                "2": "Use ngrok: ngrok http 3000",
+                "3": "Set environment: WAHA_BASE_URL=https://your-ngrok-url.ngrok.io",
+                "4": "Configure webhook: curl -X POST /setup-waha-webhook"
+            },
+            "production": {
+                "1": "Deploy WAHA to public server",
+                "2": "Set WAHA_BASE_URL environment variable",
+                "3": "Configure webhook with public URL"
+            }
+        },
+        "troubleshooting": {
+            "connection_refused": "Use ngrok to expose localhost WAHA",
+            "session_not_found": "Create WAHA session first",
+            "webhook_failed": "Check webhook URL accessibility"
         }
     })
 
@@ -690,11 +774,12 @@ def health_check():
 # Main
 # ────────────────────────────────
 if __name__ == "__main__":
-    print("🚀 Starting Dermijan Server - UX Research Enhanced with LOCALHOST WAHA")
+    print("🚀 Starting Dermijan Server - UX Research Enhanced with DYNAMIC WAHA")
     print(f"📋 Loaded {len(ALLOWED_URLS)} dermijan.com URLs")
     print("🎯 Features: Research-based formatting, Mobile-optimized, Visual hierarchy")
     print("✨ UX Enhancements: Short paragraphs, Strategic dots/hyphens, Scannable layout")
     print("📱 Mobile-first readability, Language-specific responses, Accessibility compliant")
     print(f"🔗 WAHA Integration: {WAHA_BASE_URL} (Session: {WAHA_SESSION})")
-    print("💡 Make sure to start WAHA first: docker run -it --rm -p 3000:3000/tcp --name waha devlikeapro/waha")
-    app.run(debug=True, host='0.0.0.0', port=8000)
+    print("⚙️ Environment Variables: WAHA_BASE_URL, WAHA_SESSION")
+    print("💡 For localhost: Use ngrok to expose WAHA publicly")
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get("PORT", 8000)))
