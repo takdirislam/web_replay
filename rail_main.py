@@ -26,8 +26,8 @@ except:
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "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")
 
 # WAHA Configuration (Fixed for Railway)
-WAHA_API_URL = os.getenv("WAHA_API_URL", "https://api.green-api.com")
-WAHA_SESSION = os.getenv("WAHA_SESSION", "default")
+WAHA_API_URL = os.getenv("WAHA_API_URL", "http://35.244.5.135:3000")
+WAHA_SESSION = os.getenv("WAHA_SESSION", "RITONNO")
 WAHA_WEBHOOK_TOKEN = os.getenv("WAHA_WEBHOOK_TOKEN", "railway-webhook-secret")
 
 # Production Settings
