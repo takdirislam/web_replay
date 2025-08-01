@@ -387,25 +387,25 @@ def get_perplexity_answer(question, uid):
 # WAHA Functions - ENHANCED WITH CONNECTION RECOVERY
 # ────────────────────────────────
 def extract_waha_messages(payload):
-    """Extract messages from WAHA webhook - FIXED FOR ACTUAL PAYLOAD STRUCTURE"""
+    """Extract messages from WAHA webhook - FINAL FIX FOR CURRENT STRUCTURE"""
     messages = []
     try:
         print(f"🔍 WAHA webhook received: {json.dumps(payload, indent=2)}")
         
-        # Handle the ACTUAL webhook structure from your log
-        if payload.get("event") == "message_create":
-            # Navigate to the actual message data
-            data = payload.get("data", {}).get("_data", {})
+        # Handle the current WAHA payload structure
+        if payload.get("event") == "message":
+            # Message data is directly in payload
+            data = payload.get("payload", {})
             
-            # Extract sender from id.remote
+            # Extract sender from 'from' field
             sender = ""
-            if "id" in data and "remote" in data["id"]:
-                sender = data["id"]["remote"].replace("@c.us", "").replace("@s.whatsapp.net", "")
+            if "from" in data:
+                sender = data["from"].replace("@c.us", "").replace("@s.whatsapp.net", "")
                 # Remove country code for Bangladesh numbers
                 if sender.startswith("880"):
                     sender = sender[3:]  # Remove 880 prefix
             
-            # Extract message text from body
+            # Extract message text from 'body' field
             text = ""
             if "body" in data:
                 text = data["body"]
@@ -415,7 +415,7 @@ def extract_waha_messages(payload):
                 print(f"✅ Message extracted - Sender: {sender}, Text: {text}")
             else:
                 print(f"❌ Failed extraction - Sender: {sender}, Text: {text}")
-                print(f"Available keys in _data: {list(data.keys())}")
+                print(f"Available keys in payload: {list(data.keys())}")
                 
         else:
             print(f"ℹ️ Ignoring event type: {payload.get('event')}")
@@ -425,6 +425,7 @@ def extract_waha_messages(payload):
         print(f"Full payload: {payload}")
     
     return messages
+
 
 
 def send_waha_reply(to_phone, message):
