@@ -1,46 +1,32 @@
+"""
+Dermijan Chatbot - Research-Based UX Optimized Version
+Version: 2025-07-29 UX Enhanced
+Features:
+• Research-backed text formatting for maximum readability
+• Optimized paragraph structure for mobile users
+• Strategic use of dots and hyphens for better scanning
+• Visual hierarchy implementation
+• WhatsApp-specific user experience patterns
+"""
+
 from flask import Flask, request, jsonify
 from datetime import datetime
-import requests, json, os, redis, re, logging
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+import requests, json, os, redis, re
 
 app = Flask(__name__)
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 # ────────────────────────────────
-# Railway Production Configuration
+# API Configuration - CHANGED TO WAHA
 # ────────────────────────────────
-# Environment Variables (Railway compatible)
-REDIS_URL = os.getenv("REDIS_URL", "redis://red-railway-internal:6379")
-PORT = int(os.getenv("PORT", 8000))
-
-# Initialize Redis with Railway URL
-try:
-    redis_client = redis.from_url(REDIS_URL, decode_responses=True)
-except:
-    redis_client = None
-    print("Redis connection failed - using fallback")
-
-# API Configuration
-PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "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")
-
-# WAHA Configuration (Fixed for Railway)
-WAHA_API_URL = os.getenv("WAHA_API_URL", "http://35.244.5.135:3000")
-WAHA_SESSION = os.getenv("WAHA_SESSION", "RITONNO")
-WAHA_WEBHOOK_TOKEN = os.getenv("WAHA_WEBHOOK_TOKEN", "railway-webhook-secret")
-
-# Production Settings
-DEBUG_MODE = os.getenv("FLASK_DEBUG", "False").lower() == "true"
-SERVER_HOST = "0.0.0.0"
-SERVER_PORT = PORT
-
-# Railway Logging Setup
-logging.basicConfig(level=logging.INFO)
-app.logger.setLevel(logging.INFO)
+PERPLEXITY_API_KEY = "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"
+WAHA_BASE_URL = "http://35.244.5.135:3000/"  # Default WAHA port
+WAHA_SESSION = "RITONNO"  # WAHA session name
+WAHA_SEND_TEXT_URL = f"{WAHA_BASE_URL}/api/sendText"
 
 # ────────────────────────────────
-# Dermijan URLs
+# Dermijan URLs (unchanged)
 # ────────────────────────────────
 ALLOWED_URLS = [
     "https://dermijan.com/",
@@ -114,7 +100,7 @@ ALLOWED_URLS = [
 ]
 
 # ────────────────────────────────
-# Research-Based System Prompt
+# Research-Based System Prompt (unchanged)
 # ────────────────────────────────
 SYSTEM_PROMPT = """You are a professional support assistant for Dermijan, a skin, hair and body care clinic, chatting with customers on WhatsApp.
 
@@ -176,13 +162,13 @@ CONVERSATION RULES:
 5. For missing info: Direct to support team professionally
 
 Language-Specific Contact Information:
-- English: "To book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
-- Tamil: "அப்பாயின்ட்மென்ট் புக் செய্ய, তযাবুসেয়দু এঙ্গলাই *+91 9003444435* ইল অলৈক্কবুম, এঙ্গল তোদর্পু কুঝু বিরৈবিল উঙ্গলাই তোদর্পু কোল্লুম।"
+- English: "To book an appointment, please call us at +91 9003444435 and our contact team will get in touch with you shortly."
+- Tamil: "அப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
 
 Remember: Apply research-backed formatting consistently. Every response should be scannable, mobile-friendly, and follow proven UX patterns."""
 
 # ────────────────────────────────
-# Language Detection Function
+# Language Detection Function (unchanged)
 # ────────────────────────────────
 def detect_language(text):
     """Detect if text is primarily English or Tamil based on UX research"""
@@ -197,7 +183,7 @@ def detect_language(text):
         return "english"  # default to English
 
 # ────────────────────────────────
-# Conversation Manager
+# Conversation Manager (unchanged)
 # ────────────────────────────────
 class ConversationManager:
     def __init__(self):
@@ -207,22 +193,21 @@ class ConversationManager:
     def get_history(self, uid):
         try:
             key = f"whatsapp_chat:{uid}"
-            msgs = redis_client.lrange(key, 0, -1) if redis_client else []
+            msgs = redis_client.lrange(key, 0, -1)
             return [json.loads(m) for m in reversed(msgs)]
         except Exception as e:
-            app.logger.error(f"Error getting history: {e}")
+            print("Error getting history:", e)
             return []
 
     def store(self, uid, msg, who="user"):
         try:
-            if redis_client:
-                key = f"whatsapp_chat:{uid}"
-                data = {"message": msg, "sender": who, "timestamp": datetime.now().isoformat()}
-                redis_client.lpush(key, json.dumps(data))
-                redis_client.ltrim(key, 0, self.max_msgs-1)
-                redis_client.expire(key, self.ttl)
+            key = f"whatsapp_chat:{uid}"
+            data = {"message": msg, "sender": who, "timestamp": datetime.now().isoformat()}
+            redis_client.lpush(key, json.dumps(data))
+            redis_client.ltrim(key, 0, self.max_msgs-1)
+            redis_client.expire(key, self.ttl)
         except Exception as e:
-            app.logger.error(f"Error storing message: {e}")
+            print("Error storing message:", e)
 
     def format_context(self, hist):
         if not hist: return ""
@@ -235,7 +220,7 @@ class ConversationManager:
 mgr = ConversationManager()
 
 # ────────────────────────────────
-# UX-Optimized Text Processing
+# UX-Optimized Text Processing (unchanged)
 # ────────────────────────────────
 def remove_emojis_and_icons(text):
     """Remove all emojis and icons based on accessibility research"""
@@ -261,7 +246,7 @@ def detect_appointment_request(text):
     """Enhanced appointment detection based on user behavior research"""
     english_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 
                        'meet', 'appoint', 'booking', 'reserve', 'arrange']
-    tamil_keywords = ['அப্পায়ন্ট্মেন্ট', 'পুক', 'সন्धিপ্পু', 'বরুকৈ', 'নেরম']
+    tamil_keywords = ['அப்பாய்ன்ட்மென்ட்', 'புக்', 'சந்திப்பு', 'வருகை', 'நேரம்']
     
     text_lower = text.lower()
     return (any(keyword in text_lower for keyword in english_keywords) or
@@ -279,12 +264,14 @@ def apply_research_based_formatting(text, user_question):
     user_language = detect_language(user_question)
     
     # Apply research-based paragraph breaks (2-3 sentences max per paragraph)
+    # Split long sentences and add strategic line breaks
     sentences = re.split(r'(?<=[.!?])\s+', text)
     formatted_paragraphs = []
     current_paragraph = []
     
     for sentence in sentences:
         current_paragraph.append(sentence)
+        # Mobile UX research: max 2-3 sentences per paragraph
         if len(current_paragraph) >= 2:
             formatted_paragraphs.append(' '.join(current_paragraph))
             current_paragraph = []
@@ -298,16 +285,16 @@ def apply_research_based_formatting(text, user_question):
     # Add appointment info based on UX research on call-to-action placement
     if detect_appointment_request(user_question):
         if user_language == "tamil":
-            appointment_text = "\n\nঅপ্পায়ন্ট্মেন্ট পুক সেয়য, তযাবুসেয়দু এঙ্গলাই *+91 9003444435* ইল অলৈক্কবুম, এঙ্গল তোদর্পু কুঝু বিরৈবিল উঙ্গলাই তোদর্পু কোল্লুম।"
+            appointment_text = "\n\nஅப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்."
         else:
-            appointment_text = "\n\nTo book an appointment, please call us at *+91 9003444435* and our contact team will get in touch with you shortly."
+            appointment_text = "\n\nTo book an appointment, please call us at +91 9003444435 and our contact team will get in touch with you shortly."
         
         if appointment_text not in text:
             text += appointment_text
     
     # Highlight contact info based on visual hierarchy research
     text = text.replace("dermijanofficialcontact@gmail.com", "*dermijanofficialcontact@gmail.com*")
-    text = text.replace("+91 9003444435", "*+91 9003444435*")
+    text = text.replace("+91 9003444435", "+91 9003444435")
     
     # Clean up excessive whitespace while maintaining readability structure
     text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)
@@ -323,15 +310,15 @@ def clean_source_urls(text):
     return re.sub(r'\n\s*\n', '\n', text).strip()
 
 # ────────────────────────────────
-# Enhanced Perplexity API Integration
+# Enhanced Perplexity API Integration (unchanged)
 # ────────────────────────────────
 def get_perplexity_answer(question, uid):
     """Get UX-optimized answer from Perplexity API"""
-    app.logger.info(f"Question from {uid}: {question}")
+    print(f"Question from {uid}: {question}")
     
     # Language detection for appropriate response
     user_language = detect_language(question)
-    app.logger.info(f"Detected language: {user_language}")
+    print(f"Detected language: {user_language}")
     
     hist = mgr.get_history(uid)
     ctx = mgr.format_context(hist)
@@ -339,7 +326,7 @@ def get_perplexity_answer(question, uid):
     # Research-based language instructions
     if user_language == "tamil":
         language_instruction = "Respond ONLY in Tamil. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
-        not_found_msg = "அন্ত তকবল এঙ্গল অঙ্গীকরিক্কপ্পট্ট আদারঙ্গলিল কিডৈক্কবিল্লাই। তুল্লিয়মান বিবরঙ্গলুক্কু এঙ্গল আদরবু কুঝুবাই তোদর্পু কোল্লবুম।"
+        not_found_msg = "அந்த தகவல் எங்கள் அங்கீகரிக்கப்பட்ட ஆதாரங்களில் கிடைக்கவில்லை. துல்லியமான விவரங்களுக்கு எங்கள் ஆதரவு குழுவை தொடர்பு கொள்ளவும்."
     else:
         language_instruction = "Respond ONLY in English. Apply research-based formatting: short paragraphs (2-3 sentences), use hyphens (-) for bullets, *bold* for key info."
         not_found_msg = "That information isn't available in our approved sources. Please contact our support team for accurate details."
@@ -389,213 +376,92 @@ def get_perplexity_answer(question, uid):
             
             return formatted_reply
         else:
-            app.logger.error(f"Perplexity API error: {response.status_code} - {response.text}")
+            print(f"Perplexity API error: {response.status_code} - {response.text}")
             if user_language == "tamil":
-                return "মন্নিক্কবুম, এঙ্গল সেবৈ তর্কালিকমাক কিডৈক্কবিল্লাই.\n\nপিরকু মুয়র্সিক্কবুম।"
+                return "மன்னிக்கவும், எங்கள் சேவை தற்காலிகமாக கிடைக்கவில்லை.\n\nபிறகு முயற்சிக்கவும்."
             else:
                 return "Sorry, our service is temporarily unavailable.\n\nPlease try again later."
             
     except Exception as e:
-        app.logger.error(f"Perplexity exception: {e}")
+        print(f"Perplexity exception: {e}")
         if user_language == "tamil":
-            return "মন্নিক্কবুম, তোঝিল্নুট্প সিক্কল এর্পট্টদু.\n\nপিরকু মুয়র্সিক্কবুম।"
+            return "மன்னிக்கவும், தொழில்நுட்ப சிக்கல் ஏற்பட்டது.\n\nபிறகு முயற்சிக்கவும்."
         else:
             return "Sorry, there was a technical issue.\n\nPlease try again."
 
 # ────────────────────────────────
-# WAHA API Functions (Fixed Connection)
+# WAHA Functions - CHANGED FROM WASENDER
 # ────────────────────────────────
-def format_phone_for_waha(phone):
-    """Format phone number for WAHA (phone@c.us)"""
-    clean_phone = re.sub(r'[^\d]', '', phone)
-    if not clean_phone.startswith('88'):
-        clean_phone = '88' + clean_phone
-    return f"{clean_phone}@c.us"
-
-def check_waha_status():
-    """Check WAHA session status with improved connection handling"""
-    try:
-        # Multiple attempts to connect
-        for attempt in range(3):
-            try:
-                response = requests.get(f"{WAHA_API_URL}/sessions/{WAHA_SESSION}", 
-                                     timeout=15, 
-                                     headers={'User-Agent': 'Dermijan-Bot/1.0'})
-                if response.status_code == 200:
-                    data = response.json()
-                    return data.get("status") == "WORKING"
-                elif response.status_code == 404:
-                    # Session might not exist, still consider as "working" for basic functionality
-                    return True
-            except requests.exceptions.Timeout:
-                app.logger.warning(f"WAHA status check timeout, attempt {attempt + 1}")
-                continue
-            except requests.exceptions.ConnectionError:
-                app.logger.warning(f"WAHA connection error, attempt {attempt + 1}")
-                continue
-        
-        # If all attempts failed, assume working to prevent blocking
-        return True
-    except Exception as e:
-        app.logger.error(f"WAHA status check error: {e}")
-        return True
-
-def send_waha_text_message(to, message):
-    """Send text message via WAHA API with improved error handling"""
-    chat_id = format_phone_for_waha(to)
-    
-    payload = {
-        "chatId": chat_id,
-        "text": message,
-        "session": WAHA_SESSION
-    }
-    
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "Dermijan-Bot/1.0"
-    }
-    
-    try:
-        # Multiple attempts with different timeouts
-        for attempt in range(2):
-            try:
-                response = requests.post(f"{WAHA_API_URL}/sendText", 
-                                       json=payload, 
-                                       headers=headers, 
-                                       timeout=20)
-                success = response.status_code in [200, 201, 202]
-                
-                if success:
-                    app.logger.info(f"✅ WAHA text message sent to {to}")
-                    return True
-                else:
-                    app.logger.error(f"❌ WAHA text failed: {response.status_code} - {response.text}")
-                    
-            except requests.exceptions.Timeout:
-                app.logger.warning(f"WAHA send timeout, attempt {attempt + 1}")
-                continue
-            except requests.exceptions.ConnectionError:
-                app.logger.warning(f"WAHA connection error, attempt {attempt + 1}")
-                continue
-        
-        return False
-        
-    except Exception as e:
-        app.logger.error(f"❌ WAHA text error: {e}")
-        return False
-
 def extract_waha_messages(payload):
-    """Extract messages from WAHA webhook payload"""
+    """Extract messages from WAHA webhook - CHANGED FROM WASENDER"""
     messages = []
     try:
+        # WAHA webhook structure for message events
         if payload.get("event") == "message":
-            data = payload.get("payload", {})
+            data = payload.get("data", {})
             
-            if data.get("fromMe", False):
-                return messages
+            # Extract sender from chatId (WAHA format: phone@c.us)
+            chat_id = data.get("from", "")
+            sender = chat_id.replace("@c.us", "").replace("@s.whatsapp.net", "")
             
-            sender = data.get("from", "").replace("@c.us", "")
-            message_body = data.get("body", "") or data.get("text", "")
+            # Extract message text
+            text = ""
+            if data.get("body"):
+                text = data["body"]
+            elif data.get("text"):
+                text = data["text"]
             
-            if sender and message_body:
-                messages.append((sender, message_body))
-                app.logger.info(f"📨 WAHA message extracted: {sender} -> {message_body[:50]}...")
+            if sender and text:
+                messages.append((sender, text))
+                print(f"WAHA message extracted - Sender: {sender}, Text: {text}")
                 
     except Exception as e:
-        app.logger.error(f"❌ WAHA message extraction error: {e}")
+        print(f"WAHA message extraction error: {e}")
     
     return messages
 
-# ────────────────────────────────
-# Production Error Handlers
-# ────────────────────────────────
-@app.errorhandler(404)
-def not_found_error(error):
-    app.logger.error(f'404 error: {request.url}')
-    return jsonify({"error": "Endpoint not found"}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    app.logger.error(f'Server Error: {error}')
-    return jsonify({"error": "Internal server error"}), 500
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    app.logger.error(f'Unhandled Exception: {e}')
-    return jsonify({"error": "Something went wrong"}), 500
-
-# ────────────────────────────────
-# Flask Routes - Railway Compatible
-# ────────────────────────────────
-@app.route("/", methods=["GET"])
-def root():
-    """Root endpoint for Railway health check"""
-    return jsonify({
-        "service": "Dermijan WhatsApp Chatbot",
-        "status": "Running on Railway",
-        "version": "Railway Production Ready - No Call Button",
-        "health_check": "/health"
-    })
-
-@app.route("/health", methods=["GET"])
-def health_check():
-    """Railway health check endpoint - Call Now Button Removed"""
-    try:
-        redis_status = "connected" if redis_client and redis_client.ping() else "disconnected"
-        waha_status = "connected" if check_waha_status() else "disconnected"
-    except:
-        redis_status = "error"
-        waha_status = "error"
+def send_waha_reply(to_phone, message):
+    """Send UX-optimized reply via WAHA API - CHANGED FROM WASENDER"""
+    if not WAHA_BASE_URL:
+        print("WAHA Base URL not configured")
+        return False
     
-    return jsonify({
-        "status": "healthy",
-        "service": "Dermijan WhatsApp Chatbot",
-        "platform": "Railway Cloud",
-        "timestamp": datetime.now().isoformat(),
-        "services": {
-            "redis_status": redis_status,
-            "waha_status": waha_status,
-            "waha_session": WAHA_SESSION
-        },
-        "port": SERVER_PORT,
-        "features": {
-            "waha_integration": True,
-            "railway_ready": True,
-            "research_based_formatting": True,
-            "mobile_optimized_paragraphs": True,
-            "language_specific_responses": True,
-            "text_messaging_only": True
-        }
-    })
-
-@app.route("/waha-webhook", methods=["POST"])
-def waha_webhook_handler():
-    """WAHA webhook handler for Railway"""
+    # Format phone number for WAHA (add @c.us if not present)
+    if not to_phone.endswith("@c.us"):
+        chat_id = f"{to_phone}@c.us"
+    else:
+        chat_id = to_phone
+    
+    payload = {
+        "session": WAHA_SESSION,
+        "chatId": chat_id,
+        "text": message
+    }
+    
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
     try:
-        payload = request.get_json()
-        app.logger.info(f"🔄 WAHA webhook received: {payload.get('event', 'unknown')}")
+        response = requests.post(WAHA_SEND_TEXT_URL, json=payload, headers=headers)
+        success = response.status_code in [200, 201]
         
-        messages = extract_waha_messages(payload)
-        
-        for sender, text in messages:
-            skip_phrases = ["Sources:", "dermijan.com", "isn't available in our approved sources"]
-            if any(phrase.lower() in text.lower() for phrase in skip_phrases):
-                app.logger.info(f"⏭️ Skipped message from {sender}: {text[:30]}...")
-                continue
+        if success:
+            print(f"WAHA message sent successfully to {chat_id}")
+        else:
+            print(f"WAHA send error: {response.status_code} - {response.text}")
             
-            app.logger.info(f"🤖 Processing question from {sender}")
-            answer = get_perplexity_answer(text, sender)
-            send_waha_text_message(sender, answer)
-        
-        return jsonify({"status": "success", "processed": len(messages)})
-        
+        return success
     except Exception as e:
-        app.logger.error(f"❌ WAHA webhook error: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        print(f"WAHA send error: {e}")
+        return False
 
+# ────────────────────────────────
+# Flask Routes (minimal changes)
+# ────────────────────────────────
 @app.route("/ask", methods=["POST"])
 def ask_question():
-    """Direct API endpoint"""
+    """Direct API endpoint with UX optimization"""
     data = request.get_json()
     question = data.get("question")
     user_id = data.get("user_id", "anonymous")
@@ -604,7 +470,31 @@ def ask_question():
         return jsonify({"reply": "Please provide a question."}), 400
     
     answer = get_perplexity_answer(question, user_id)
-    return jsonify({"reply": answer, "platform": "Railway"})
+    return jsonify({"reply": answer})
+
+@app.route("/webhook", methods=["POST"])
+def webhook_handler():
+    """WhatsApp webhook handler with WAHA integration - CHANGED FROM WASENDER"""
+    try:
+        payload = request.get_json()
+        print(f"WAHA webhook received: {json.dumps(payload, indent=2)}")
+        
+        messages = extract_waha_messages(payload)
+        
+        for sender, text in messages:
+            # Skip bot messages to prevent loops
+            skip_phrases = ["Sources:", "dermijan.com", "isn't available in our approved sources"]
+            if any(phrase.lower() in text.lower() for phrase in skip_phrases):
+                continue
+            
+            answer = get_perplexity_answer(text, sender)
+            send_waha_reply(sender, answer)
+        
+        return jsonify({"status": "success"})
+        
+    except Exception as e:
+        print(f"WAHA webhook error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/conversation/<user_id>", methods=["GET"])
 def get_conversation(user_id):
@@ -612,25 +502,45 @@ def get_conversation(user_id):
     history = mgr.get_history(user_id)
     return jsonify({"user_id": user_id, "conversation": history, "count": len(history)})
 
-@app.route("/test-waha/<phone>", methods=["GET"])
-def test_waha_message(phone):
-    """Test WAHA message sending"""
-    test_msg = "Test message from Dermijan - Railway Deployment"
-    success = send_waha_text_message(phone, test_msg)
+@app.route("/", methods=["GET"])
+def health_check():
+    """Health check with UX feature status - UPDATED FOR WAHA"""
+    try:
+        redis_status = "connected" if redis_client.ping() else "disconnected"
+    except:
+        redis_status = "error"
+    
     return jsonify({
-        "phone": phone,
-        "message_sent": success,
-        "waha_status": check_waha_status(),
-        "formatted_phone": format_phone_for_waha(phone)
+        "status": "Dermijan Server Running - UX Optimized with WAHA",
+        "version": "Research-Based User Experience Enhanced - WAHA Integration",
+        "endpoints": ["/ask", "/webhook", "/conversation/<user_id>"],
+        "allowed_urls_count": len(ALLOWED_URLS),
+        "redis_status": redis_status,
+        "waha_config": {
+            "base_url": WAHA_BASE_URL,
+            "session": WAHA_SESSION,
+            "send_endpoint": WAHA_SEND_TEXT_URL
+        },
+        "ux_features": {
+            "research_based_formatting": True,
+            "mobile_optimized_paragraphs": True,
+            "language_specific_responses": True,
+            "readability_enhanced": True,
+            "visual_hierarchy_implemented": True,
+            "accessibility_compliant": True,
+            "whatsapp_pattern_optimized": True,
+            "scanning_friendly_layout": True
+        }
     })
 
 # ────────────────────────────────
-# Railway Production Entry Point
+# Main
 # ────────────────────────────────
 if __name__ == "__main__":
-    app.logger.info("🚀 Starting Dermijan Chatbot on Railway - Call Button Removed")
-    app.logger.info(f"🌐 Port: {SERVER_PORT}")
-    app.logger.info(f"🐳 WAHA API: {WAHA_API_URL}")
-    app.logger.info("✨ Features: Railway Cloud, WAHA Integration, Text Only, Fixed Connection")
-    
-    app.run(host=SERVER_HOST, port=SERVER_PORT, debug=DEBUG_MODE)
+    print("🚀 Starting Dermijan Server - UX Research Enhanced with WAHA")
+    print(f"📋 Loaded {len(ALLOWED_URLS)} dermijan.com URLs")
+    print("🎯 Features: Research-based formatting, Mobile-optimized, Visual hierarchy")
+    print("✨ UX Enhancements: Short paragraphs, Strategic dots/hyphens, Scannable layout")
+    print("📱 Mobile-first readability, Language-specific responses, Accessibility compliant")
+    print(f"🔗 WAHA Integration: {WAHA_BASE_URL} (Session: {WAHA_SESSION})")
+    app.run(debug=True, host='0.0.0.0', port=8000)
