@@ -382,42 +382,51 @@ def get_perplexity_answer(question, uid):
 # WAHA Functions - IMPROVED VERSION
 # ────────────────────────────────
 def extract_waha_messages(payload):
-    """Extract messages from WAHA webhook - IMPROVED VERSION"""
+    """Extract messages from WAHA webhook - FIXED FOR ACTUAL PAYLOAD STRUCTURE"""
     messages = []
     try:
         print(f"🔍 WAHA webhook received: {json.dumps(payload, indent=2)}")
         
-        # Handle different WAHA webhook structures[2][3]
+        # Handle the actual WAHA payload structure
         if payload.get("event") == "message":
-            data = payload.get("data", {})
+            # WAHA sends message data in "payload" not "data"
+            data = payload.get("payload", {})
             
-            # Extract sender - WAHA uses format: phone@c.us
+            # Extract sender - remove @c.us suffix
             sender = ""
             if "from" in data:
-                sender = data["from"]
-            elif "chatId" in data:
-                sender = data["chatId"]
-            
-            # Clean sender format
-            if sender:
-                sender = sender.replace("@c.us", "").replace("@s.whatsapp.net", "")
+                sender = data["from"].replace("@c.us", "").replace("@s.whatsapp.net", "")
                 # Remove country code for Bangladesh numbers
                 if sender.startswith("880"):
                     sender = sender[3:]  # Remove 880 prefix
             
-            # Extract message text
+            # Extract message text from different possible fields
             text = ""
             if "body" in data:
                 text = data["body"]
             elif "text" in data:
                 text = data["text"]
+            elif "message" in data:
+                # Sometimes message content is nested
+                msg_content = data["message"]
+                if isinstance(msg_content, dict):
+                    if "conversation" in msg_content:
+                        text = msg_content["conversation"]
+                    elif "extendedTextMessage" in msg_content:
+                        text = msg_content["extendedTextMessage"].get("text", "")
+                else:
+                    text = str(msg_content)
             
             if sender and text:
                 messages.append((sender, text))
                 print(f"✅ Message extracted - Sender: {sender}, Text: {text}")
             else:
                 print(f"❌ Failed extraction - Sender: {sender}, Text: {text}")
-                print(f"Available keys in data: {list(data.keys())}")
+                print(f"Available keys in payload: {list(data.keys())}")
+                
+                # Debug: Show what's in the payload
+                for key, value in data.items():
+                    print(f"  {key}: {value}")
         else:
             print(f"ℹ️ Ignoring event type: {payload.get('event')}")
                 
@@ -426,6 +435,7 @@ def extract_waha_messages(payload):
         print(f"Full payload: {payload}")
     
     return messages
+
 
 def send_waha_reply(to_phone, message):
     """Send message via WAHA localhost - IMPROVED VERSION"""
