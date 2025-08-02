@@ -289,7 +289,8 @@ def apply_research_based_formatting(text, user_question):
     
     # Apply research-based paragraph breaks (2-3 sentences max per paragraph)
     # Split long sentences and add strategic line breaks
-    sentences = re.split(r'(?<![A-Z][a-z]|Dr|Mr|Mrs|Ms|Prof|Sr|Jr)(?<=[.!?])\s+', text)
+    sentences = re.split(r'(?<!Dr|Mr|Mrs|Ms|Prof|Sr|Jr)(?<=[.!?])\s+', text)
+
     formatted_paragraphs = []
     current_paragraph = []
     
