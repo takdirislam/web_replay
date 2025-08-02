@@ -260,6 +260,19 @@ def detect_appointment_request(text):
     return (any(keyword in text_lower for keyword in english_keywords) or
             any(keyword in text for keyword in tamil_keywords))
 
+def detect_location_request(text):
+    """Enhanced location detection based on user queries"""
+    english_keywords = ['location', 'address', 'where', 'directions', 'map', 'place', 
+                       'situated', 'located', 'find you', 'come to', 'visit', 'branch',
+                       'clinic address', 'where are you', 'how to reach', 'nearby']
+    tamil_keywords = ['இடம்', 'முகवরি', 'எங்கே', 'வழி', 'স্থান', 'ঠিকানা', 'کোথায়',
+                     'ব্রাঞ্চ', 'ক্লিনিক', 'অবস্থান']
+    
+    text_lower = text.lower()
+    return (any(keyword in text_lower for keyword in english_keywords) or
+            any(keyword in text for keyword in tamil_keywords))
+
+
 def apply_research_based_formatting(text, user_question):
     """Apply UX research-backed formatting for optimal readability"""
     # Remove any emojis first
@@ -299,6 +312,16 @@ def apply_research_based_formatting(text, user_question):
         
         if appointment_text not in text:
             text += appointment_text
+    # Add location info based on location request detection
+    if detect_location_request(user_question):
+        if user_language == "tamil":
+            location_text = "\n\n*Dermijan Clinic முগবরি*:\n\n*T. Nagar Branch*: 96, 3rd Floor, Gopathi Narayanaswami Chetty Rd, T. Nagar, Chennai 600017\n\n*Adyar Branch*: No 30, 1st Floor, Shastri Nagar, Adyar, Chennai 600020\n\nবাজি কেট্ক: +91 9003444435"
+        else:
+            location_text = "\n\n*Dermijan Clinic Address*:\n\n*T. Nagar Branch*: 96, 3rd Floor, Gopathi Narayanaswami Chetty Rd, T. Nagar, Chennai 600017\n\n*Adyar Branch*: No 30, 1st Floor, Shastri Nagar, Adyar, Chennai 600020\n\nFor directions, call: +91 9003444435"
+        
+        if location_text not in text:
+            text += location_text
+
     
     # Highlight contact info based on visual hierarchy research
     text = text.replace("dermijanofficialcontact@gmail.com", "*dermijanofficialcontact@gmail.com*")
