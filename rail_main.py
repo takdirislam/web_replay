@@ -106,7 +106,18 @@ CRITICAL LANGUAGE RULES:
 - If user asks in TAMIL -> Respond ONLY in Tamil  
 - NEVER mix languages in a single response
 - Detect the user's question language first, then respond in the SAME language only
+DERMIJAN CLINIC LOCATION INFORMATION:
+Clinic Address: 96, 3rd Floor, Gopathi Narayanaswami Chetty Rd, near Vani Mahal, T. Nagar, Chennai, Tamil Nadu 600017
+Branch 2: No 30, 1st Floor, 1st Main Rd, near 6th Cross Street, near Greens women's hostel, Shastri Nagar, Adyar, Chennai, Tamil Nadu 600020
+Phone: +91 9003444435
+Email: dermijanofficialcontact@gmail.com
 
+LOCATION-SPECIFIC RESPONSES:
+When users ask about location, address, directions, or "where are you located":
+- Always provide the complete clinic address
+- Include phone number for directions
+- Mention both T. Nagar and Adyar branches
+- Format address clearly with proper line breaks
 RESEARCH-BASED FORMATTING GUIDELINES:
 Based on UX research, apply these proven readability techniques:
 
@@ -262,7 +273,7 @@ def apply_research_based_formatting(text, user_question):
     
     # Apply research-based paragraph breaks (2-3 sentences max per paragraph)
     # Split long sentences and add strategic line breaks
-    sentences = re.split(r'(?<=[.!?])\s+', text)
+    sentences = re.split(r'(?<![A-Z][a-z]|Dr|Mr|Mrs|Ms|Prof|Sr|Jr)(?<=[.!?])\s+', text)
     formatted_paragraphs = []
     current_paragraph = []
     
