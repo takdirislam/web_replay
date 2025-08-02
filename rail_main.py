@@ -1,6 +1,9 @@
 from flask import Flask, request, jsonify
 from datetime import datetime
 import requests, json, os, redis, re
+import concurrent.futures
+import threading
+
 
 app = Flask(__name__)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
@@ -206,7 +209,7 @@ class ConversationManager:
     def format_context(self, hist):
         if not hist: return ""
         ctx = "Previous conversation:\n"
-        for m in hist[-10:]:
+        for m in hist:
             role = "User" if m["sender"] == "user" else "Assistant"
             ctx += f"{role}: {m['message']}\n"
         return ctx + "\nCurrent conversation:\n"
@@ -510,6 +513,32 @@ def send_waha_reply(to_phone, message):
     print("❌ All retry attempts failed")
     return False
 
+def process_single_user(sender, text):
+    """Process individual user message concurrently"""
+    try:
+        print(f"🔄 Processing: {sender} -> {text}")
+        
+        # Skip bot messages to prevent loops
+        skip_phrases = ["sorry, our service", "মন্নিক্কবুম্", "dermijan.com", 
+                       "temporarily unavailable", "technical issue", "connection"]
+        if any(phrase.lower() in text.lower() for phrase in skip_phrases):
+            print(f"⏭️ Skipping bot message from {sender}")
+            return
+        
+        print(f"🤖 Getting AI response for {sender}...")
+        answer = get_perplexity_answer(text, sender)
+        print(f"💬 AI Answer for {sender}: {answer[:50]}...")
+        
+        print(f"📤 Sending reply to {sender}...")
+        success = send_waha_reply(sender, answer)
+        print(f"✅ {sender}: Send result: {success}")
+        
+        if not success:
+            print(f"⚠️ Message send failed for {sender}")
+            
+    except Exception as e:
+        print(f"❌ Error processing {sender}: {e}")
+
 # ────────────────────────────────
 # Flask Routes
 # ────────────────────────────────
@@ -528,9 +557,8 @@ def ask_question():
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook_handler():
-    """Enhanced webhook handler with improved error handling"""
+    """Enhanced concurrent webhook handler"""
     if request.method == "GET":
-        # WAHA webhook verification
         return jsonify({"status": "webhook_ready", "timestamp": datetime.now().isoformat()})
     
     try:
@@ -538,34 +566,23 @@ def webhook_handler():
         
         print("🔔" + "="*60)
         print("WAHA WEBHOOK RECEIVED")
-        print(f"Headers: {dict(request.headers)}")
-        print(f"Method: {request.method}")
         print(f"Payload: {json.dumps(payload, indent=2)}")
         print("="*60)
         
         messages = extract_waha_messages(payload)
         print(f"📨 Extracted {len(messages)} messages")
         
-        for sender, text in messages:
-            print(f"🔄 Processing: {sender} -> {text}")
+        # Process messages concurrently
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = []
             
-            # Skip bot messages to prevent loops
-            skip_phrases = ["sorry, our service", "মন্নিক্কবুম্", "dermijan.com", 
-                           "temporarily unavailable", "technical issue", "connection"]
-            if any(phrase.lower() in text.lower() for phrase in skip_phrases):
-                print("⏭️ Skipping bot message")
-                continue
+            for sender, text in messages:
+                # Submit each user's message for parallel processing
+                future = executor.submit(process_single_user, sender, text)
+                futures.append(future)
             
-            print("🤖 Getting AI response...")
-            answer = get_perplexity_answer(text, sender)
-            print(f"💬 AI Answer: {answer[:100]}...")
-            
-            print("📤 Sending reply...")
-            success = send_waha_reply(sender, answer)
-            print(f"✅ Send result: {success}")
-            
-            if not success:
-                print("⚠️ Message send failed - check WAHA configuration")
+            # Wait for all to complete
+            concurrent.futures.wait(futures, timeout=30)
         
         return jsonify({
             "status": "success", 
@@ -575,9 +592,8 @@ def webhook_handler():
         
     except Exception as e:
         print(f"❌ Webhook error: {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @app.route("/conversation/<user_id>", methods=["GET"])
 def get_conversation(user_id):
@@ -769,4 +785,4 @@ if __name__ == "__main__":
     print(f"🔗 WAHA Integration: {WAHA_BASE_URL} (Session: {WAHA_SESSION})")
     print("⚙️ Environment Variables: WAHA_BASE_URL, WAHA_SESSION")
     print("💡 For localhost: Use ngrok to expose WAHA publicly")
-    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get("PORT", 8000)))
+    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get("PORT", 8000)))
