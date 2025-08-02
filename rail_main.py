@@ -284,7 +284,21 @@ def apply_research_based_formatting(text, user_question):
         # Detect user's language for appropriate responses
         user_language = detect_language(user_question)
         
-        # Simple sentence splitting without complex regex
+        # FIXED: Protect common titles before splitting
+        # Replace titles with placeholders to prevent unwanted splits
+        title_replacements = {
+            'Dr. ': '<<<DR_PLACEHOLDER>>>', 
+            'Mr. ': '<<<MR_PLACEHOLDER>>>', 
+            'Mrs. ': '<<<MRS_PLACEHOLDER>>>', 
+            'Ms. ': '<<<MS_PLACEHOLDER>>>',
+            'Prof. ': '<<<PROF_PLACEHOLDER>>>'
+        }
+        
+        # Protect titles
+        for title, placeholder in title_replacements.items():
+            text = text.replace(title, placeholder)
+        
+        # Now split sentences safely
         sentences = text.split('. ')
         formatted_paragraphs = []
         current_paragraph = []
@@ -305,6 +319,10 @@ def apply_research_based_formatting(text, user_question):
         
         # Join paragraphs with double line breaks for visual breathing space
         text = '\n\n'.join(formatted_paragraphs)
+        
+        # Restore titles back to original form
+        for title, placeholder in title_replacements.items():
+            text = text.replace(placeholder, title)
         
         # Add appointment info based on UX research on call-to-action placement
         if detect_appointment_request(user_question):
@@ -331,6 +349,7 @@ def apply_research_based_formatting(text, user_question):
         print(f"Formatting error: {e}")
         # Return original text if formatting fails
         return text
+
 
 def clean_source_urls(text):
     """Remove source URLs that harm readability"""
