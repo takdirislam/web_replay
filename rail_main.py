@@ -12,6 +12,7 @@ redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 # API Configuration - DYNAMIC WAHA URL
 # ────────────────────────────────
 PERPLEXITY_API_KEY = "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"
+WAHA_API_KEY = os.getenv("WAHA_API_KEY", "")
 
 # Dynamic WAHA URL - Environment variable দিয়ে control করা হবে
 WAHA_BASE_URL = os.getenv("WAHA_BASE_URL", "https://waha.peacockindia.in")
@@ -480,47 +481,46 @@ def send_waha_reply(to_phone, message):
     if not WAHA_BASE_URL:
         print("❌ WAHA Base URL missing")
         return False
-    
-    # Clean and format phone number for Bangladesh
+
     clean_phone = re.sub(r'[^\d]', '', to_phone)
-    
-    # Add 880 country code if missing
     if not clean_phone.startswith('880'):
         clean_phone = '880' + clean_phone
-    
-    # WAHA format: phone@c.us
+
     chat_id = f"{clean_phone}@c.us"
-    
     payload = {
         "session": WAHA_SESSION,
         "chatId": chat_id,
         "text": message
     }
-    
-    headers = {"Content-Type": "application/json"}
-    
-    # Retry mechanism with multiple attempts
+    # ---- API KEY SUPPORT ADDED ----
+    headers = {
+        "Content-Type": "application/json",
+    }
+    if WAHA_API_KEY:
+        headers["Authorization"] = f"Bearer {WAHA_API_KEY}"
+    # -------------------------------
+
     max_retries = 3
     retry_delay = [1, 2, 3]  # seconds
-    
+
     for attempt in range(max_retries):
         try:
             print(f"📤 Attempt {attempt + 1}/{max_retries} - Sending to: {chat_id}")
             print(f"📝 Message: {message[:100]}...")
             print(f"🔗 URL: {WAHA_SEND_TEXT_URL}")
-            
+
             response = requests.post(
-                WAHA_SEND_TEXT_URL, 
-                json=payload, 
-                headers=headers, 
+                WAHA_SEND_TEXT_URL,
+                json=payload,
+                headers=headers,
                 timeout=30
             )
-            
+
             print(f"📊 Response: {response.status_code}")
             print(f"📄 Body: {response.text}")
-            
+
             success = response.status_code in [200, 201]
-            
+
             if success:
                 print("✅ WAHA message sent successfully")
                 return True
@@ -531,7 +531,7 @@ def send_waha_reply(to_phone, message):
                     import time
                     time.sleep(retry_delay[attempt])
                     continue
-                
+
         except requests.exceptions.ConnectionError as e:
             print(f"❌ Connection error on attempt {attempt + 1}: {e}")
             if "Connection refused" in str(e):
@@ -540,7 +540,7 @@ def send_waha_reply(to_phone, message):
                 print("   1. Check if WAHA is running on the specified URL")
                 print("   2. For localhost: Use ngrok to expose WAHA")
                 print("   3. Update WAHA_BASE_URL environment variable")
-                
+
             if attempt < max_retries - 1:
                 print(f"⏳ Retrying in {retry_delay[attempt]} seconds...")
                 import time
@@ -553,9 +553,10 @@ def send_waha_reply(to_phone, message):
                 import time
                 time.sleep(retry_delay[attempt])
                 continue
-    
+
     print("❌ All retry attempts failed")
     return False
+
 
 def process_single_user(sender, text):
     """Process individual user message concurrently"""
