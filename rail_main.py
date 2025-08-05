@@ -387,7 +387,7 @@ def send_waha_reply(to_phone, message):
     }
     headers = {
         "Content-Type": "application/json",
-        "Api-Key": WAHA_API_KEY
+        "x-api-key": WAHA_API_KEY
     }
     max_retries = 3
     retry_delay = [1, 2, 3]
