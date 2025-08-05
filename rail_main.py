@@ -11,7 +11,6 @@ redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 # ────────────────────────────────
 PERPLEXITY_API_KEY = "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"
 WAHA_API_KEY = "sha512:fffe2a21f95675cb0bf455a5c27016085ca677ba49b1acd32bc122d772cedbe511cdd5937369f8b9b6a8766a980f120bf5daaddc8d6c8aa1b6ed07fcd4e8c674"
-
 WAHA_BASE_URL = os.getenv("WAHA_BASE_URL", "https://waha.peacockindia.in")
 WAHA_SESSION = os.getenv("WAHA_SESSION", "DERMIJAN_BOT")
 WAHA_SEND_TEXT_URL = f"{WAHA_BASE_URL}/api/sendText"
@@ -388,7 +387,7 @@ def send_waha_reply(to_phone, message):
     }
     headers = {
         "Content-Type": "application/json",
-        "apikey": WAHA_API_KEY
+        "Api-Key": WAHA_API_KEY
     }
     max_retries = 3
     retry_delay = [1, 2, 3]
