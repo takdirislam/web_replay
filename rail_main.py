@@ -2,9 +2,6 @@ from flask import Flask, request, jsonify
 from datetime import datetime
 import requests, json, os, redis, re
 
-# (নতুন লাইব্রেরি)
-import phonenumbers
-
 app = Flask(__name__)
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
@@ -13,13 +10,14 @@ redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 # API Configuration - DYNAMIC WAHA URL
 # ────────────────────────────────
 PERPLEXITY_API_KEY = "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"
-WAHA_API_KEY="sha512:fffe2a21f95675cb0bf455a5c27016085ca677ba49b1acd32bc122d772cedbe511cdd5937369f8b9b6a8766a980f120bf5daaddc8d6c8aa1b6ed07fcd4e8c674"
+WAHA_API_KEY = "sha512:fffe2a21f95675cb0bf455a5c27016085ca677ba49b1acd32bc122d772cedbe511cdd5937369f8b9b6a8766a980f120bf5daaddc8d6c8aa1b6ed07fcd4e8c674"
 
 WAHA_BASE_URL = os.getenv("WAHA_BASE_URL", "https://waha.peacockindia.in")
 WAHA_SESSION = os.getenv("WAHA_SESSION", "DERMIJAN_BOT")
 WAHA_SEND_TEXT_URL = f"{WAHA_BASE_URL}/api/sendText"
 
 print(f"🔗 WAHA Configuration: {WAHA_BASE_URL} (Session: {WAHA_SESSION})")
+
 
 # ────────────────────────────────
 # Dermijan URLs (unchanged)
@@ -95,6 +93,7 @@ ALLOWED_URLS = [
     "https://dermijan.com/achieve-youthful-skin-with-effective-skin-tightening-techniques/"
 ]
 
+
 # ────────────────────────────────
 # Research-Based System Prompt
 # ────────────────────────────────
@@ -102,7 +101,7 @@ SYSTEM_PROMPT = """You are a professional support assistant for Dermijan, a skin
 
 CRITICAL LANGUAGE RULES:
 - If user asks in ENGLISH -> Respond ONLY in English
-- If user asks in TAMIL -> Respond ONLY in Tamil  
+- If user asks in TAMIL -> Respond ONLY in Tamil
 - NEVER mix languages in a single response
 - Detect the user's question language first, then respond in the SAME language only
 
@@ -145,7 +144,7 @@ Response Structure Template:
 
 [Benefits/Features - if applicable]:
 - [Benefit 1]
-- [Benefit 2] 
+- [Benefit 2]
 - [Benefit 3]
 
 [Next step/Call-to-action]
@@ -183,7 +182,6 @@ class ConversationManager:
     def __init__(self):
         self.ttl = 7 * 24 * 3600
         self.max_msgs = 20
-
     def get_history(self, uid):
         try:
             key = f"whatsapp_chat:{uid}"
@@ -192,7 +190,6 @@ class ConversationManager:
         except Exception as e:
             print("Error getting history:", e)
             return []
-
     def store(self, uid, msg, who="user"):
         try:
             key = f"whatsapp_chat:{uid}"
@@ -202,7 +199,6 @@ class ConversationManager:
             redis_client.expire(key, self.ttl)
         except Exception as e:
             print("Error storing message:", e)
-
     def format_context(self, hist):
         if not hist: return ""
         ctx = "Previous conversation:\n"
@@ -218,8 +214,8 @@ mgr = ConversationManager()
 # ────────────────────────────────
 def remove_emojis_and_icons(text):
     emoji_pattern = re.compile("["
-        u"\U0001F600-\U0001F64F" 
-        u"\U0001F300-\U0001F5FF" 
+        u"\U0001F600-\U0001F64F"
+        u"\U0001F300-\U0001F5FF"
         u"\U0001F680-\U0001F6FF"
         u"\U0001F1E0-\U0001F1FF"
         "]+", flags=re.UNICODE)
@@ -231,7 +227,7 @@ def remove_emojis_and_icons(text):
 
 def detect_appointment_request(text):
     english_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 'meet', 'appoint', 'booking', 'reserve', 'arrange']
-    tamil_keywords = ['அப்பாய்ன்ட்மெண்ட்', 'புக்', 'சந்திப்பு', 'வருகை', 'நேரம்']
+    tamil_keywords = ['அப்பாய்ன்ட்மென்ட்', 'புக்', 'சந்திப்பு', 'வருகை', 'நேரம்']
     text_lower = text.lower()
     return (any(keyword in text_lower for keyword in english_keywords) or
             any(keyword in text for keyword in tamil_keywords))
@@ -253,7 +249,7 @@ def apply_research_based_formatting(text, user_question):
     text = '\n\n'.join(formatted_paragraphs)
     if detect_appointment_request(user_question):
         if user_language == "tamil":
-            appointment_text = "\n\nஅப்பாய்ன்ட்மென்‌ட் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்।"
+            appointment_text = "\n\nஅப்பாய்ன்ட்மென்ட் புக் செய்ய, தயவுசெய்து எங்களை +91 9003444435 இல் அழைக்கவும், எங்கள் தொடர்பு குழு விரைவில் உங்களை தொடர்பு கொள்ளும்।"
         else:
             appointment_text = "\n\nTo book an appointment, please call us at +91 9003444435 and our contact team will get in touch with you shortly."
         if appointment_text not in text:
@@ -316,7 +312,7 @@ def get_perplexity_answer(question, uid):
     }
 
     try:
-        response = requests.post("https://api.perplexity.ai/chat/completions", 
+        response = requests.post("https://api.perplexity.ai/chat/completions",
                                json=payload, headers=headers, timeout=30)
         if response.status_code == 200:
             raw_reply = response.json()["choices"][0]["message"]["content"]
@@ -333,19 +329,22 @@ def get_perplexity_answer(question, uid):
         return "Sorry, there was a technical issue.\n\nPlease try again."
 
 # ────────────────────────────────
-# Universal Phone → WhatsApp chatId Function (নতুন)
+# Universal Phone → WhatsApp chatId Function (No phonenumbers)
 # ────────────────────────────────
-def format_chatid(phone_number, default_country="IN"):
-    try:
-        phone_number = str(phone_number).strip().replace(" ", "").replace("-", "")
-        parsed = phonenumbers.parse(phone_number, default_country)
-        e164 = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
-        chat_id = e164.replace("+", "") + "@c.us"
-        return chat_id
-    except Exception as e:
-        print(f"⚠️ Chat id formatting error: {e}. Fallback raw: {phone_number}@c.us")
-        clean = re.sub(r"[^\d]", "", phone_number)
-        return clean + "@c.us"
+def format_chatid(phone_number, default_country_code="880"):
+    """
+    Returns WhatsApp chatId as countrycode+number@c.us, eg: 8801xxxxxxxxx@c.us (Bangladesh), 9190xxxxxxxx@c.us (India)
+    """
+    number = str(phone_number).strip().replace(' ', '').replace('-', '').replace('(', '').replace(')', '')
+    if number.startswith('+'):
+        number = number[1:]
+    if number.startswith('00'):
+        number = number[2:]
+    if number.startswith('0'):
+        number = default_country_code + number[1:]
+    elif len(number) == 10 and number.isdigit():
+        number = default_country_code + number
+    return number + "@c.us"
 
 # ────────────────────────────────
 # WAHA Functions
@@ -378,11 +377,10 @@ def extract_waha_messages(payload):
     return messages
 
 def send_waha_reply(to_phone, message):
-    """International ChatId ও API KEY ইউজ করছে"""
     if not WAHA_BASE_URL:
         print("❌ WAHA Base URL missing")
         return False
-    chat_id = format_chatid(to_phone)
+    chat_id = format_chatid(to_phone, default_country_code="880") # বাংলাদেশ default, চাইলে "91"
     payload = {
         "session": WAHA_SESSION,
         "chatId": chat_id,
@@ -442,7 +440,7 @@ def send_waha_reply(to_phone, message):
     return False
 
 # ────────────────────────────────
-# Flask Routes (আগের মতো)
+# Flask Routes (আগের মতোই)
 # ────────────────────────────────
 @app.route("/ask", methods=["POST"])
 def ask_question():
@@ -470,7 +468,7 @@ def webhook_handler():
         print(f"📨 Extracted {len(messages)} messages")
         for sender, text in messages:
             print(f"🔄 Processing: {sender} -> {text}")
-            skip_phrases = ["sorry, our service", "মন্নিক্কবুম্", "dermijan.com", 
+            skip_phrases = ["sorry, our service", "মন্নিক্কবুম্", "dermijan.com",
                            "temporarily unavailable", "technical issue", "connection"]
             if any(phrase.lower() in text.lower() for phrase in skip_phrases):
                 print("⏭️ Skipping bot message")
@@ -484,7 +482,7 @@ def webhook_handler():
             if not success:
                 print("⚠️ Message send failed - check WAHA configuration")
         return jsonify({
-            "status": "success", 
+            "status": "success",
             "processed": len(messages),
             "timestamp": datetime.now().isoformat()
         })
