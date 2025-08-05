@@ -212,9 +212,19 @@ mgr = ConversationManager()
 # UX-Optimized Text Processing (এগুলোও আগের মতোই)
 # ────────────────────────────────
 def split_sentences(text):
-    title_abbr = r'(Dr|Mr|Mrs|Ms|Prof|Sr|Jr|Md|Adv|Eng|Capt|Col|Lt|Maj|Gen)\.'
-    pattern = r'(?<!' + title_abbr + r')(?<=[.!?])\s+'
-    return re.split(pattern, text)
+    abbrev = ['Dr.', 'Mr.', 'Mrs.', 'Ms.', 'Prof.', 'Sr.', 'Jr.', 'Md.', 'Adv.', 'Eng.', 'Capt.', 'Col.', 'Lt.', 'Maj.', 'Gen.']
+    marker = '___ABBR___'
+    for a in abbrev:
+        text = text.replace(a, a.replace('.', marker))
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    clean = []
+    for s in sentences:
+        for a in abbrev:
+            s = s.replace(a.replace('.', marker), a)
+        clean.append(s)
+    return clean
+
+
 
 def remove_emojis_and_icons(text):
     emoji_pattern = re.compile("["
