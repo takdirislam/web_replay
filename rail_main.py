@@ -12,11 +12,11 @@ redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 # API Configuration - DYNAMIC WAHA URL
 # ────────────────────────────────
 PERPLEXITY_API_KEY = "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"
-WAHA_API_KEY = "ckr7eqa_MKE6teg2xef"
+WAHA_API_KEY = "sha512:fffe2a21f95675cb0bf455a5c27016085ca677ba49b1acd32bc122d772cedbe511cdd5937369f8b9b6a8766a980f120bf5daaddc8d6c8aa1b6ed07fcd4e8c674"
 
-# Dynamic WAHA URL - Environment variable দিয়ে control করা হবে
+
 WAHA_BASE_URL = "https://waha.peacockindia.in"
-WAHA_SESSION = "DWRB"  # ✅ Fixed: default session
+WAHA_SESSION = "DWRB" 
 WAHA_SEND_TEXT_URL = f"{WAHA_BASE_URL}/api/sendText"
 
 # Debug info
