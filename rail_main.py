@@ -223,6 +223,11 @@ def remove_emojis_and_icons(text):
     for symbol in symbols_to_remove:
         text = text.replace(symbol, '')
     return text.strip()
+def split_sentences(text):
+    title_abbr = r'(Dr|Mr|Mrs|Ms|Prof|Sr|Jr|Md|Adv|Eng|Capt|Col|Lt|Maj|Gen)\.'
+    pattern = r'(?<!' + title_abbr + r')(?<=[.!?])\s+'
+    return re.split(pattern, text)
+
 
 def detect_appointment_request(text):
     english_keywords = ['appointment', 'book', 'schedule', 'visit', 'consultation', 'meet', 'appoint', 'booking', 'reserve', 'arrange']
@@ -235,7 +240,7 @@ def apply_research_based_formatting(text, user_question):
     text = remove_emojis_and_icons(text)
     text = re.sub(r'\*\*([^*]+)\*\*', r'*\1*', text)
     user_language = detect_language(user_question)
-    sentences = re.split(r'(?<=[.!?])\s+', text)
+    sentences = split_sentences(text)
     formatted_paragraphs = []
     current_paragraph = []
     for sentence in sentences:
