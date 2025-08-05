@@ -301,8 +301,8 @@ def get_perplexity_answer(question, uid):
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt}
         ],
-        "max_tokens": 1000,
-        "temperature": 0.1
+        "max_tokens": 800,
+        "temperature": 0.2
     }
 
     headers = {
