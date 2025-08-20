@@ -11,8 +11,8 @@ redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 # ────────────────────────────────
 # API Configuration - DYNAMIC WAHA URL
 # ────────────────────────────────
-PERPLEXITY_API_KEY = "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"
-WAHA_API_KEY = "ckr7eqa_MKE6teg2xef"
+PERPLEXITY_API_KEY = "##########"
+WAHA_API_KEY = "#####"
 WAHA_BASE_URL = os.getenv("WAHA_BASE_URL", "https://waha.peacockindia.in")
 WAHA_SESSION = os.getenv("WAHA_SESSION", "DERMIJAN_BOT")
 WAHA_SEND_TEXT_URL = f"{WAHA_BASE_URL}/api/sendText"
